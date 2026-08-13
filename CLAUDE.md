@@ -17,6 +17,7 @@ Read these files before doing any work:
 - `docs/notes/codeatlas_capstone_plan.md` — 20 iterations, LangChain comparison table, capstone plan
 - `docs/status_update.md` — current progress, what was last completed, what is next
 - `docs/journal.md` — detailed step-by-step log of everything done so far
+- `docs/interview.md` — key concepts explained in interview-ready format (update whenever a new concept is clearly understood)
 
 ## Golden Rule
 
