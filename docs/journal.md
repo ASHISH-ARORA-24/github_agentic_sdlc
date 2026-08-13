@@ -98,6 +98,62 @@ PYTHONPATH=. uv run python3 neo4j_loader/load_project.py source/codeatlas/sample
 Identical — same scripts, same pipeline, same output. Nothing changed here. This is intentional. The capstone adds the LangChain/LangGraph layer on top of this foundation without touching the data pipeline.
 
 **Next:**
-Iteration 1 — LangChain Model Abstraction. Add `langchain` and `langchain-openai` to `pyproject.toml`, understand what `ChatOpenAI` replaces, and send our first message to an LLM the LangChain way.
+Iteration 1 — LangChain Model Abstraction. Add `langchain-openai` to `pyproject.toml`, understand what `ChatOpenAI` replaces, and send our first message to an LLM the LangChain way.
+
+---
+
+## Iteration 1 — LangChain Model Abstraction ✅
+
+### Step 3 — Understood the concept and built src/llm.py
+
+**What we did:**
+Added `langchain-openai` to `pyproject.toml`, created `src/llm.py`, and ran a simple LLM call using LangChain's `ChatOpenAI`, `SystemMessage`, and `HumanMessage`. It worked on the first run.
+
+**Why:**
+Before writing any agent, we needed to understand how LangChain wraps LLM providers. Every future iteration builds on this — tools, agents, memory, and orchestration all go through this same model interface.
+
+**What was learned:**
+
+1. `ChatOpenAI` is a wrapper around the OpenAI SDK — the actual HTTP call to OpenAI is unchanged. LangChain just standardises the interface.
+
+2. Raw dicts are replaced with message objects:
+   - `{"role": "system", "content": "..."}` → `SystemMessage("...")`
+   - `{"role": "user", "content": "..."}` → `HumanMessage("...")`
+   - `{"role": "assistant", "content": "..."}` → `AIMessage("...")`
+
+3. Response extraction is cleaner:
+   - CodeAtlas: `response.choices[0].message.content`
+   - LangChain: `response.content`
+
+4. Provider swap = change one line. To switch from OpenAI to Gemini tomorrow:
+   - Install `langchain-google-genai`
+   - Change `ChatOpenAI` to `ChatGoogleGenerativeAI`
+   - Everything else — messages, invoke, response.content — stays identical
+
+5. In CodeAtlas, switching providers meant rewriting every file that touched the LLM. Here it means changing one line in one place.
+
+**How it compares to CodeAtlas:**
+
+| CodeAtlas (manual) | LangChain (Iteration 1) |
+|---|---|
+| `from openai import OpenAI` | `from langchain_openai import ChatOpenAI` |
+| `client = OpenAI(api_key=...)` | `llm = ChatOpenAI(model=..., temperature=0)` |
+| `{"role": "user", "content": "..."}` | `HumanMessage("...")` |
+| `response.choices[0].message.content` | `response.content` |
+| Tied to OpenAI | Swap provider by changing one class |
+
+**Files created:**
+- `src/llm.py` — simple LLM call using ChatOpenAI, SystemMessage, HumanMessage
+
+**Dependency added:**
+- `langchain-openai>=0.2.0` — added to `pyproject.toml` with a comment explaining why
+
+**Command to run:**
+```bash
+PYTHONPATH=. uv run python3 src/llm.py
+```
+
+**Next:**
+Iteration 2 — LangChain Tools. Learn how to define tools using the `@tool` decorator and bind them to the model so the LLM can decide when to call them.
 
 ---

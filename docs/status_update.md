@@ -7,21 +7,25 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Not started
-**Next step:** Iteration 1 — LangChain Model Abstraction
+**Phase:** Iteration 2 — LangChain Tools
+**Next step:** Define tools with `@tool`, bind to model, understand how LLM decides when to call them
 
 ---
 
 ## Completed Iterations
 
-None yet.
+### ✅ Iteration 1 — LangChain Model Abstraction (2026-08-13)
+- Added `langchain-openai` to `pyproject.toml`
+- Created `src/llm.py` with `ChatOpenAI`, `SystemMessage`, `HumanMessage`
+- Learned: LangChain wraps providers — swap one class to change provider, nothing else changes
+- CodeAtlas comparison: replaces raw `client.chat.completions.create()` and dict-based messages
 
 ---
 
 ## Iteration Log
 
 ### Iteration 1 — LangChain Model Abstraction
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-13)
 - **Goal:** Understand ChatOpenAI, messages, model invocation, provider abstraction
 - **CodeAtlas comparison:** Direct `client.chat.completions.create()` in `agents/code_agent.py`
 - **Files to create:** TBD

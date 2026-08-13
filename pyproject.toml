@@ -13,6 +13,10 @@ dependencies = [
 
     # Environment variables — for Neo4j credentials in .env
     "python-dotenv>=1.2.2",
+
+    # LangChain OpenAI integration — added in Iteration 1
+    # Provides ChatOpenAI wrapper and message types (HumanMessage, SystemMessage, AIMessage)
+    "langchain-openai>=0.2.0",
 ]
 
 [dependency-groups]
