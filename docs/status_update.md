@@ -1,0 +1,140 @@
+# Capstone Progress — GitHub Agentic SDLC
+
+This file is updated automatically after every iteration is completed.
+It is also read at the start of every conversation so Claude knows exactly where we left off.
+
+---
+
+## Current Status
+
+**Phase:** Not started
+**Next step:** Iteration 1 — LangChain Model Abstraction
+
+---
+
+## Completed Iterations
+
+None yet.
+
+---
+
+## Iteration Log
+
+### Iteration 1 — LangChain Model Abstraction
+- **Status:** 🔲 Not started
+- **Goal:** Understand ChatOpenAI, messages, model invocation, provider abstraction
+- **CodeAtlas comparison:** Direct `client.chat.completions.create()` in `agents/code_agent.py`
+- **Files to create:** TBD
+
+### Iteration 2 — LangChain Tools
+- **Status:** 🔲 Not started
+- **Goal:** Understand `@tool` decorator, tool schemas, `model.bind_tools()`, tool invocation
+- **CodeAtlas comparison:** Manual TOOLS list (JSON dicts) in `agents/code_agent.py`
+- **Files to create:** TBD
+
+### Iteration 3 — Single LangChain Agent
+- **Status:** 🔲 Not started
+- **Goal:** Full Reason → Tool → Observe → Reason loop using LangChain
+- **CodeAtlas comparison:** `while True` agent loop in `agents/code_agent.py`
+- **Files to create:** TBD
+
+### Iteration 4 — Planning + Structured State
+- **Status:** 🔲 Not started
+- **Goal:** Structured outputs, workflow state, task context
+- **CodeAtlas comparison:** `agents/planner.py`, `agents/state.py`, `agents/executor.py`
+- **Files to create:** TBD
+
+### Iteration 5 — Memory
+- **Status:** 🔲 Not started
+- **Goal:** Short-term context, long-term memory, retrieval, quality controls. State vs memory distinction.
+- **CodeAtlas comparison:** `memory/memory_store.py`, `memory/project_memory.json`
+- **Files to create:** TBD
+
+### Iteration 6 — Guardrails + Human-in-the-Loop
+- **Status:** 🔲 Not started
+- **Goal:** Tool authorization (ALLOW/DENY/REQUIRE_APPROVAL), resource authorization, prompt-injection defense, human approval
+- **CodeAtlas comparison:** Entire `guardrails/` folder
+- **Files to create:** TBD
+
+### Iteration 7 — Evaluation
+- **Status:** 🔲 Not started
+- **Goal:** Deterministic checks + LLM-as-a-Judge
+- **CodeAtlas comparison:** `evaluation/` folder
+- **Files to create:** TBD
+
+### Iteration 8 — Observability / Tracing
+- **Status:** 🔲 Not started
+- **Goal:** Per-LLM-call latency, per-tool latency, tokens, cost, failures. LangSmith comparison.
+- **CodeAtlas comparison:** `observability/trace_reporter.py`, events in `agents/code_agent.py`
+- **Files to create:** TBD
+
+### Iteration 9 — Specialist Agents
+- **Status:** 🔲 Not started
+- **Goal:** Planner, Analyst, Coder, Tester, Reviewer — each with one clear responsibility
+- **CodeAtlas comparison:** `multi_agent_demo/` folder
+- **Files to create:** TBD
+
+### Iteration 10 — Multi-Agent Orchestration
+- **Status:** 🔲 Not started
+- **Goal:** Agent registry, common contract, routing, shared state, agent independence
+- **CodeAtlas comparison:** `multi_agent_demo/orchestrator.py`
+- **Files to create:** TBD
+
+### Iteration 11 — Failure / Retry Loops
+- **Status:** 🔲 Not started
+- **Goal:** tester fails → coder fixes → retest; reviewer rejects → coder fixes → re-review
+- **CodeAtlas comparison:** Not implemented in CodeAtlas
+- **Files to create:** TBD
+
+### Iteration 12 — GitHub Issue Integration
+- **Status:** 🔲 Not started
+- **Goal:** `create_issue()` tool wired into the agent
+- **CodeAtlas comparison:** Not implemented in CodeAtlas
+- **Files to create:** TBD
+
+### Iteration 13 — GitHub Branch Integration
+- **Status:** 🔲 Not started
+- **Goal:** `create_branch()`, `checkout_branch()`, branch naming rules
+- **CodeAtlas comparison:** Not implemented in CodeAtlas
+- **Files to create:** TBD
+
+### Iteration 14 — Coding + Testing Workflow
+- **Status:** 🔲 Not started
+- **Goal:** Coding agent inspects files, modifies, runs tests, responds to failures
+- **CodeAtlas comparison:** `tools/write_file.py`, `tools/run_tests.py`, agent loop in `agents/code_agent.py`
+- **Files to create:** TBD
+
+### Iteration 15 — Commit / Push / Pull Request
+- **Status:** 🔲 Not started
+- **Goal:** `commit_changes()`, `push_branch()`, `create_pull_request()` with guardrails
+- **CodeAtlas comparison:** Not implemented in CodeAtlas
+- **Files to create:** TBD
+
+### Iteration 16 — AI Reviewer
+- **Status:** 🔲 Not started
+- **Goal:** Reviewer agent independently reviews implementation → APPROVED or REJECTED + reason
+- **CodeAtlas comparison:** `multi_agent_demo/reviewer_agent.py`
+- **Files to create:** TBD
+
+### Iteration 17 — Human Approval + Merge
+- **Status:** 🔲 Not started
+- **Goal:** HITL gate before merge, rework path on rejection
+- **CodeAtlas comparison:** `guardrails/human_approval.py`
+- **Files to create:** TBD
+
+### Iteration 18 — Close GitHub Issue
+- **Status:** 🔲 Not started
+- **Goal:** After merge, verify and close originating issue
+- **CodeAtlas comparison:** Not implemented in CodeAtlas
+- **Files to create:** TBD
+
+### Iteration 19 — End-to-End SDLC
+- **Status:** 🔲 Not started
+- **Goal:** Connect all pieces into one pipeline: Requirement → Issue → Branch → Code → Test → PR → Review → Approval → Merge → Close
+- **Files to create:** TBD
+
+### Iteration 20 — Parallel Multi-Agent Execution
+- **Status:** 🔲 Not started
+- **Goal:** Orchestrator identifies independent tasks and runs agents concurrently
+- **Note:** Only after sequential end-to-end is fully understood
+- **Files to create:** TBD
