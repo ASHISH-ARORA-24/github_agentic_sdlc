@@ -102,6 +102,57 @@ Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangC
 
 ---
 
+## Iteration 4 — Planning + Structured State ✅
+
+### Step 6 — Built planner_agent, state, orchestrator, synthesizer
+
+**What we did:**
+Built four new files that together form a complete multi-step task execution pipeline. Tested end-to-end with a real task: "Add input validation to reserve_stock to reject negative quantities." The agent planned, searched, read, modified code, ran tests, and produced a clean final summary. All 6 tests passed.
+
+**Files created:**
+- `src/planner_agent.py` — LLM with strong SystemMessage, no tools, returns JSON plan with steps
+- `src/state.py` — creates the state dict that holds plan, results, and status across all steps
+- `src/orchestrator.py` — pure coordination logic, no LLM, no tools — calls planner → creates state → loops agent per step → calls synthesizer
+- `src/synthesizer.py` — LLM with no tools, reads all step results, produces one clean final answer
+
+**Also fixed:**
+- `src/agent.py` — wrapped `tool_fn.invoke()` in try/except so tool errors go back to the LLM instead of crashing the orchestrator. The agent self-corrects — tried `test_stock_manager.py`, got error, retried with `tests/test_stock_manager.py`, succeeded.
+
+**Key concepts learned:**
+
+1. **Planner has no tools** — its job is to DECIDE what needs to be done, not to do it. A strong SystemMessage ("always investigate before modifying, always test after modifying") directly shaped the 8-step plan the LLM produced.
+
+2. **Orchestrator has no LLM and no tools** — it is pure Python coordination. It calls planner, creates state, loops through steps, updates state, calls synthesizer. Nothing else.
+
+3. **State connects steps** — without state, each step starts blind. The orchestrator builds a context string from previous results and appends it to each step's question. By Step 8, the agent knows everything found in Steps 1-7.
+
+4. **Agent never sees the state dict** — the orchestrator extracts what the agent needs (project + question + context) and passes it as plain values. The agent is a stateless worker.
+
+5. **Synthesizer turns raw results into a readable answer** — 8 raw step outputs become one clean, specific summary with file names, method names, and test results.
+
+6. **Self-correction is automatic** — when a tool returns `{"error": "File not found"}` the LLM sees it and retries with a corrected path. No special code needed — just feed errors back to the LLM.
+
+**CodeAtlas comparison:**
+
+| CodeAtlas | This project |
+|---|---|
+| `agents/planner.py` | `src/planner_agent.py` — same concept, LangChain types |
+| `agents/state.py` | `src/state.py` — identical pattern |
+| `agents/executor.py` | `src/orchestrator.py` — same loop, cleaner separation |
+| `agents/synthesizer.py` | `src/synthesizer.py` — same concept |
+
+**End-to-end test result:**
+- Task: "Add input validation to reserve_stock to reject negative quantities"
+- Planner: 8 steps generated
+- Agent: searched, read, modified `stock_manager.py`, ran tests, self-corrected file path
+- Tests: 6 passed (including new `test_reserve_stock_negative_quantity`)
+- Synthesizer: clean final answer produced
+
+**Next:**
+Iteration 5 — Memory. Add long-term project memory that persists across tasks. Distinguish between state (this task) and memory (all tasks).
+
+---
+
 ## Iteration 3 — Single LangChain Agent ✅
 
 ### Step 5 — Built src/agent.py with manual agent loop using LangChain types

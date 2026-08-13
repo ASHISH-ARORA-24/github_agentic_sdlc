@@ -7,8 +7,8 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 4 — Planning + Structured State
-**Next step:** Add a planner that converts a task into structured steps, track progress with a state dict
+**Phase:** Iteration 5 — Memory
+**Next step:** Add long-term project memory that persists across tasks. Distinguish state (this task) vs memory (all tasks).
 
 ---
 
@@ -51,7 +51,7 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 4 — Planning + Structured State
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-13)
 - **Goal:** Structured outputs, workflow state, task context
 - **CodeAtlas comparison:** `agents/planner.py`, `agents/state.py`, `agents/executor.py`
 - **Files to create:** TBD

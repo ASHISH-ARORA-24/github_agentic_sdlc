@@ -86,9 +86,14 @@ def run_agent(project: str, question: str) -> str:
             print(f"Tool called : {tool_name}")
             print(f"Arguments   : {tool_args}")
 
-            # Call the actual tool function
+            # Call the actual tool function.
+            # Catch errors and return them to the LLM instead of crashing.
+            # The LLM can then self-correct — e.g. retry with the right file path.
             tool_fn = tool_by_name[tool_name]
-            result  = tool_fn.invoke(tool_args)
+            try:
+                result = tool_fn.invoke(tool_args)
+            except Exception as e:
+                result = {"error": str(e)}
 
             print(f"Result      : {str(result)[:200]}...\n")
 
