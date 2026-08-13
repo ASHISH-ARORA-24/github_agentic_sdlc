@@ -17,6 +17,10 @@ dependencies = [
     # LangChain OpenAI integration — added in Iteration 1
     # Provides ChatOpenAI wrapper and message types (HumanMessage, SystemMessage, AIMessage)
     "langchain-openai>=0.2.0",
+
+    # LangChain core — added in Iteration 3
+    # Provides create_tool_calling_agent, AgentExecutor, ChatPromptTemplate
+    "langchain>=0.3.0",
 ]
 
 [dependency-groups]

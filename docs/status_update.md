@@ -7,8 +7,8 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 3 — Single LangChain Agent
-**Next step:** Create `src/agent.py`, bind tools to model with `llm.bind_tools()`, implement agent loop
+**Phase:** Iteration 4 — Planning + Structured State
+**Next step:** Add a planner that converts a task into structured steps, track progress with a state dict
 
 ---
 
@@ -45,7 +45,7 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 3 — Single LangChain Agent
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-13)
 - **Goal:** Full Reason → Tool → Observe → Reason loop using LangChain
 - **CodeAtlas comparison:** `while True` agent loop in `agents/code_agent.py`
 - **Files to create:** TBD

@@ -102,6 +102,60 @@ Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangC
 
 ---
 
+## Iteration 3 — Single LangChain Agent ✅
+
+### Step 5 — Built src/agent.py with manual agent loop using LangChain types
+
+**What we did:**
+Created `src/agent.py` with a working agent that uses `llm.bind_tools()` and a manual `while True` loop using LangChain message types (`SystemMessage`, `HumanMessage`, `ToolMessage`). Tested with the question "what does reserve_stock do?" — agent called `search_code`, got the result from ChromaDB, and produced a detailed grounded answer with the actual code snippet.
+
+Also added `langchain>=0.3.0` to `pyproject.toml` — added only when needed, not upfront.
+
+**Why we implemented the loop manually:**
+`create_tool_calling_agent` and `AgentExecutor` could not be imported from LangChain 1.3.15. But this turned out to be better for learning — the manual loop makes every step visible, which is exactly what this capstone is for.
+
+**What was learned:**
+
+1. **The LLM cannot run tools — it only requests them.** When the LLM says "call search_code with query='def reserve_stock'", it produces a text description. Our code must actually find the tool, run it, and feed the result back. This is true in every agent framework — frameworks only differ in how much they hide this from you.
+
+2. **The Act → Observe block** — this is the standard practice in every agentic system ever built:
+   ```python
+   tool_fn = tool_by_name[tool_name]       # find the function
+   result  = tool_fn.invoke(tool_args)      # run it
+   messages.append(ToolMessage(...))        # feed result back to LLM
+   ```
+
+3. **`project` is not involved in the loop at all** — it was already solved by `make_tools(project)` closure in Iteration 2. The tools returned already have `project` baked in.
+
+4. **LangChain types vs raw dicts:**
+
+   | CodeAtlas (raw) | LangChain (typed) |
+   |---|---|
+   | `{"role": "tool", "tool_call_id": ..., "content": ...}` | `ToolMessage(content=..., tool_call_id=...)` |
+   | `tool_call.function.name` | `tool_call["name"]` |
+   | `json.loads(tool_call.function.arguments)` | `tool_call["args"]` — already a dict |
+   | `response.choices[0].message.content` | `response.content` |
+   | `response.choices[0].message.tool_calls` | `response.tool_calls` |
+
+5. **AgentExecutor / LangGraph / every framework** wraps exactly this same `while True` loop. They only differ in visibility. Writing it manually first means you can explain it in any interview, with any framework.
+
+6. **bind_tools** — `llm.bind_tools(tools)` tells the LLM which tools are available. In CodeAtlas this was done by passing `tools=TOOLS` to every `client.chat.completions.create()` call. Here we bind once and reuse.
+
+**Files created/changed:**
+- `src/agent.py` — manual agent loop using LangChain message types
+- `pyproject.toml` — added `langchain>=0.3.0`
+
+**Test result:**
+Question: "what does reserve_stock do?"
+- Agent called `search_code` once
+- Got ChromaDB results back
+- Produced a detailed, grounded answer with the full method code
+
+**Next:**
+Iteration 4 — Planning + Structured State. Add a planner that converts a task into structured steps, and a state dict that tracks progress through the workflow.
+
+---
+
 ## Iteration 2 — LangChain Tools ✅
 
 ### Step 4 — Built src/tools.py with @tool decorator and make_tools factory
