@@ -21,10 +21,10 @@
 #   PYTHONPATH=. uv run python3 src/orchestrator.py "codeatlas/ecommerce" "Add validation to reserve_stock"
 
 import sys
-from src.planner_agent import create_plan
-from src.state         import create_state
-from src.agent         import run_agent
-from src.synthesizer   import synthesize
+from src.agents.planner import create_plan
+from src.state          import create_state
+from src.agents.executor import run_agent
+from src.agents.synthesizer import synthesize
 
 
 def run_orchestrator(project: str, task: str) -> dict:

@@ -17,6 +17,7 @@ from pathlib import Path
 
 import chromadb
 from src.memory_store import save_memory as _save_memory
+from src.guardrails.write_files import authorize_write
 from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -184,6 +185,11 @@ def make_tools(project: str) -> list:
         Use this only when source code needs to be modified.
         The complete new file content must be provided.
         """
+        # Guardrail — check before touching anything
+        authorization = authorize_write(project=project, repo=repo, file_path=file_path)
+        if authorization["decision"] == "deny":
+            return {"error": "Write blocked by guardrail.", "reason": authorization["reason"]}
+
         repo_root      = (SOURCE_ROOT / project / repo).resolve()
         requested_file = (repo_root / file_path).resolve()
 
