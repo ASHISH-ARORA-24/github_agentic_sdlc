@@ -43,3 +43,61 @@ Before writing any code, we needed a complete picture of what was already built 
 Start Iteration 1 — LangChain Model Abstraction.
 
 ---
+
+### Step 2 — Copied foundation from CodeAtlas and built ChromaDB + Neo4j
+
+**What we did:**
+Copied the data infrastructure from CodeAtlas into the new capstone project. Created `DEVELOPER.md` with all setup commands and explanations. Built a fresh ChromaDB and Neo4j from scratch by running the crawl → chunk → load pipeline across all four sample repos.
+
+**Why:**
+The crawlers, chunkers, neo4j_loader, and sample source repos are pure data infrastructure — no LLM, no OpenAI, no LangChain involved. There is no reason to rebuild them. They are the foundation every future agent will depend on. Copying them lets us focus the capstone on what is actually new: the LangChain/LangGraph agent layer.
+
+We also made a deliberate decision: **add dependencies only when we need them**. LangChain is not in `pyproject.toml` yet. It will be added in Iteration 1 when we actually use it — so we understand why it is being added.
+
+**What was learned / decided:**
+- What to copy vs what to rebuild — copy the data layer, rebuild the agent layer
+- `pyproject.toml` starts with only `chromadb`, `neo4j`, `python-dotenv` — nothing more
+- `.env` and `chroma_db/` are gitignored — secrets and generated files never go into git
+- `output/` is also gitignored — crawled JSON is generated locally, not committed
+- The pipeline always runs in order: crawl → chunk → load Neo4j. Each step depends on the previous one.
+
+**Files created:**
+- `DEVELOPER.md` — full setup guide with every command explained
+- `crawlers/`, `chunkers/`, `neo4j_loader/`, `tools/` — copied from CodeAtlas
+- `source/codeatlas/` — sample repos (ecommerce + calculator) copied from CodeAtlas
+- `.env.example` — safe template committed to git
+- `.gitignore` — updated to ignore `.env`, `chroma_db/`, `output/`
+
+**Commands run:**
+```bash
+# Crawl (AST extraction → JSON)
+PYTHONPATH=. uv run python3 crawlers/crawl_project.py source/codeatlas/ecommerce/inventory_service
+PYTHONPATH=. uv run python3 crawlers/crawl_project.py source/codeatlas/ecommerce/order_service
+PYTHONPATH=. uv run python3 crawlers/crawl_project.py source/codeatlas/sample/calculator
+PYTHONPATH=. uv run python3 crawlers/crawl_project.py source/codeatlas/sample/grade_calculator
+
+# Chunk (JSON → ChromaDB embeddings)
+PYTHONPATH=. uv run python3 chunkers/python_chunker.py source/codeatlas/ecommerce/inventory_service
+PYTHONPATH=. uv run python3 chunkers/python_chunker.py source/codeatlas/ecommerce/order_service
+PYTHONPATH=. uv run python3 chunkers/python_chunker.py source/codeatlas/sample/calculator
+PYTHONPATH=. uv run python3 chunkers/python_chunker.py source/codeatlas/sample/grade_calculator
+
+# Load Neo4j (JSON → knowledge graph)
+PYTHONPATH=. uv run python3 neo4j_loader/load_project.py source/codeatlas/ecommerce/inventory_service
+PYTHONPATH=. uv run python3 neo4j_loader/load_project.py source/codeatlas/ecommerce/order_service
+PYTHONPATH=. uv run python3 neo4j_loader/load_project.py source/codeatlas/sample/calculator
+PYTHONPATH=. uv run python3 neo4j_loader/load_project.py source/codeatlas/sample/grade_calculator
+```
+
+**Results:**
+- Crawl: 12 JSON files generated across 4 repos
+- ChromaDB: 55 chunks embedded and stored
+- Neo4j: 55 nodes created with full relationship graph
+
+**How it compares to CodeAtlas:**
+Identical — same scripts, same pipeline, same output. Nothing changed here. This is intentional. The capstone adds the LangChain/LangGraph layer on top of this foundation without touching the data pipeline.
+
+**Next:**
+Iteration 1 — LangChain Model Abstraction. Add `langchain` and `langchain-openai` to `pyproject.toml`, understand what `ChatOpenAI` replaces, and send our first message to an LLM the LangChain way.
+
+---

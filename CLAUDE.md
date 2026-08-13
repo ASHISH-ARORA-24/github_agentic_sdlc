@@ -18,6 +18,14 @@ Read these files before doing any work:
 - `docs/status_update.md` — current progress, what was last completed, what is next
 - `docs/journal.md` — detailed step-by-step log of everything done so far
 
+## Golden Rule
+
+**Keep it simple. Do not over-engineer.**
+
+This is a learning capstone project, not a production system. Every piece of code must be easy to read, easy to understand, and easy to explain. If something can be done in 10 lines, do not write 50. If a simple function works, do not build a class hierarchy. Complexity is the enemy of learning.
+
+When in doubt, choose the simpler option — always.
+
 ## Teaching Philosophy
 
 - **Explain before you code.** Before writing any code, explain what we are about to do and why.
