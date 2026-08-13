@@ -19,3 +19,6 @@ chroma_db/
 
 # Crawled output — generated locally, never committed
 output/
+
+# Long-term memory — grows at runtime, never committed
+project_memory.json

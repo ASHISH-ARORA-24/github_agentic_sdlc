@@ -102,6 +102,55 @@ Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangC
 
 ---
 
+## Iteration 5 — Memory ✅
+
+### Step 7 — Built src/memory_store.py and wired save_memory tool into the agent
+
+**What we did:**
+Built long-term memory that persists across agent runs. Created `src/memory_store.py`, added `save_memory` as a tool in `src/tools.py`, and updated `src/agent.py` to load memories at start and inject them into the system prompt. Tested end-to-end — agent saved `test_directory` and `test_framework` to `project_memory.json` automatically.
+
+**Files created/changed:**
+- `src/memory_store.py` — `save_memory()` and `get_memories()`, stores to `project_memory.json` at root
+- `src/tools.py` — added `save_memory` as a `@tool`, project injected via closure
+- `src/agent.py` — loads memory at start, injects into system prompt, instructs LLM to save stable facts
+- `.gitignore` — added `project_memory.json` (generated at runtime, never committed)
+
+**Key concepts learned:**
+
+1. **Memory is shared across all agents for a project** — not per-agent. Every fact discovered is useful to every agent. Facts like test location and framework are project-level knowledge, not agent-level knowledge.
+
+2. **The LLM decides what to save** — we don't explicitly tell it "save this now." The system prompt rule ("save stable, reusable facts — not temporary state") is enough. The LLM called `save_memory` on its own when it found the test framework.
+
+3. **The planner does not use memory (yet)** — this is a known enhancement. The planner only sees the task description, not the project. Injecting memory into the planner would make it create more project-specific plans. Deferred to a future enhancement.
+
+4. **Memory vs State:**
+   - State = this task only ("current step is 3")
+   - Memory = across all tasks ("test files are in tests/ folder")
+   - State lives in the orchestrator. Memory lives in `project_memory.json`.
+
+5. **JSON keyed by project** — `{"codeatlas/ecommerce": [{key, value}, ...]}`. All agents for the same project share the same memory pool. Different projects have separate sections.
+
+6. **Memory location:**
+   - Code: `src/memory_store.py` — all Python code lives in `src/`
+   - Data: `project_memory.json` at root — generated at runtime, gitignored
+
+**Test result:**
+- Run 1: Agent discovered `test_directory: order_service/tests` → saved to JSON
+- Run 2: Agent loaded that memory → discovered `test_framework: pytest` → saved to JSON
+- JSON now has both entries — memory accumulates across runs
+
+**CodeAtlas comparison:**
+- Same concept as `memory/memory_store.py` in CodeAtlas
+- Here: code in `src/`, JSON at root, `save_memory` is a proper `@tool` (LLM decides when to call it)
+
+**Known enhancement (deferred):**
+- Inject memory into the planner too — so plans are project-specific, not generic
+
+**Next:**
+Iteration 6 — Guardrails + Human-in-the-Loop.
+
+---
+
 ## Iteration 4 — Planning + Structured State ✅
 
 ### Step 6 — Built planner_agent, state, orchestrator, synthesizer

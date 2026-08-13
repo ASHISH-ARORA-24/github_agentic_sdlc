@@ -16,6 +16,7 @@ import subprocess
 from pathlib import Path
 
 import chromadb
+from src.memory_store import save_memory as _save_memory
 from chromadb.utils.embedding_functions.onnx_mini_lm_l6_v2 import ONNXMiniLM_L6_V2
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -229,4 +230,14 @@ def make_tools(project: str) -> list:
             "stderr":      result.stderr,
         }
 
-    return [search_code, get_dependencies, read_file, write_file, run_tests]
+    @tool
+    def save_memory(key: str, value: str) -> dict:
+        """
+        Save a reusable fact about this project to long-term memory.
+        Use this when you discover something stable and useful for future runs —
+        such as where test files are, what framework is used, or naming conventions.
+        Do not save temporary state, current errors, step numbers, or task-specific information.
+        """
+        return _save_memory(project=project, key=key, value=value)
+
+    return [search_code, get_dependencies, read_file, write_file, run_tests, save_memory]

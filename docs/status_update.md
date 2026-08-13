@@ -7,8 +7,8 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 5 — Memory
-**Next step:** Add long-term project memory that persists across tasks. Distinguish state (this task) vs memory (all tasks).
+**Phase:** Iteration 6 — Guardrails + Human-in-the-Loop
+**Next step:** Tool authorization (ALLOW/DENY/REQUIRE_APPROVAL), resource guardrails, prompt injection defense, human approval gate
 
 ---
 
@@ -57,7 +57,7 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 5 — Memory
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-13)
 - **Goal:** Short-term context, long-term memory, retrieval, quality controls. State vs memory distinction.
 - **CodeAtlas comparison:** `memory/memory_store.py`, `memory/project_memory.json`
 - **Files to create:** TBD

@@ -26,6 +26,7 @@ from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
 from src.tools import make_tools
+from src.memory_store import get_memories
 
 load_dotenv()
 
@@ -51,6 +52,16 @@ def run_agent(project: str, question: str) -> str:
     # In CodeAtlas this was the execute_tool() dispatcher
     tool_by_name = {t.name: t for t in tools}
 
+    # ── Memory ────────────────────────────────────────────────────────────────
+    # Load all saved facts about this project and inject into the system prompt.
+    # The LLM sees what is already known — no need to rediscover it.
+    memories     = get_memories(project)
+    memory_text  = "\n".join(f"- {m['key']}: {m['value']}" for m in memories)
+    memory_block = (
+        f"\n\nKnown facts about this project:\n{memory_text}"
+        if memory_text else ""
+    )
+
     # ── Messages ──────────────────────────────────────────────────────────────
     # LangChain typed messages replace raw dicts:
     #   {"role": "system", "content": "..."} → SystemMessage("...")
@@ -59,7 +70,12 @@ def run_agent(project: str, question: str) -> str:
         SystemMessage(
             "You are a software engineering assistant with access to a codebase. "
             "Use the available tools to find accurate, grounded answers. "
-            "Do not guess or invent facts about the code."
+            "Do not guess or invent facts about the code. "
+            "If you discover a stable, reusable fact about the project — such as where "
+            "test files are, what framework is used, or naming conventions — save it "
+            "using save_memory so future runs do not need to rediscover it. "
+            "Do not save temporary state, errors, or task-specific information."
+            + memory_block
         ),
         HumanMessage(question),
     ]
