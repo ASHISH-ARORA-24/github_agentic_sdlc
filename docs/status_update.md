@@ -7,8 +7,8 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 6 — Guardrails + Human-in-the-Loop
-**Next step:** Tool authorization (ALLOW/DENY/REQUIRE_APPROVAL), resource guardrails, prompt injection defense, human approval gate
+**Phase:** GitHub SDLC Tools
+**Next step:** Build src/tools/github.py — create_issue, create_branch, commit, push, create_pr. Then guardrails around those operations.
 
 ---
 
@@ -63,7 +63,7 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 6 — Guardrails + Human-in-the-Loop
-- **Status:** 🔲 Not started
+- **Status:** ✅ Partial (2026-08-13) — write_files guardrail done. Tool policy + HITL deferred until GitHub tools are built.
 - **Goal:** Tool authorization (ALLOW/DENY/REQUIRE_APPROVAL), resource authorization, prompt-injection defense, human approval
 - **CodeAtlas comparison:** Entire `guardrails/` folder
 - **Files to create:** TBD
