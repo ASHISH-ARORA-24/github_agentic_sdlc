@@ -98,7 +98,57 @@ PYTHONPATH=. uv run python3 neo4j_loader/load_project.py source/codeatlas/sample
 Identical — same scripts, same pipeline, same output. Nothing changed here. This is intentional. The capstone adds the LangChain/LangGraph layer on top of this foundation without touching the data pipeline.
 
 **Next:**
-Iteration 1 — LangChain Model Abstraction. Add `langchain-openai` to `pyproject.toml`, understand what `ChatOpenAI` replaces, and send our first message to an LLM the LangChain way.
+Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangChain auto-generates schemas, and how `project` is injected without the LLM seeing it.
+
+---
+
+## Iteration 2 — LangChain Tools ✅
+
+### Step 4 — Built src/tools.py with @tool decorator and make_tools factory
+
+**What we did:**
+Created `src/tools.py` with all five tools using LangChain's `@tool` decorator. Removed the separate `tools/` folder — everything consolidated into `src/`. Solved the hardcoded project problem by introducing `make_tools(project)` — a factory function that creates tools bound to a specific project at runtime.
+
+Also fixed `tools/code_search.py` and `tools/graph_tool.py` which were importing from `qa.ask` (which doesn't exist in this project) — moved those shared helpers into the tools file directly.
+
+**Why:**
+- `@tool` replaces the handwritten JSON schema TOOLS list from CodeAtlas
+- `make_tools(project)` makes the tools flexible — project comes from the user's request, not hardcoded in the source
+- Deleting `tools/` keeps the project simple — `src/` is the only place we build new code
+
+**What was learned:**
+
+1. `@tool` decorator — LangChain reads the function's type hints and docstring and auto-generates the JSON schema that the LLM uses to decide when and how to call the tool. No manual schema writing needed.
+
+2. The LLM only sees parameters it needs to decide — `query`, `symbol`, `repo`, `file_path`. It never sees `project` because that is not an LLM decision.
+
+3. **Closure pattern** — functions defined inside `make_tools(project)` are local to that call. Each call to `make_tools()` creates a fresh set of tool objects that remember the `project` from their creation scope. Two calls to `make_tools()` with different projects create completely independent sets of tools.
+
+4. **Who calls make_tools?** — The agent entry point (`src/agent.py`, built in Iteration 3). The user provides project + question, agent.py calls `make_tools(project)`, creates the agent with those tools, and runs it.
+
+5. `qa/ask.py` from CodeAtlas is **not needed** in this project — it was the old fixed RAG pipeline. We replaced it with an agent that decides which tools to call.
+
+**CodeAtlas comparison:**
+
+| CodeAtlas (manual) | LangChain (Iteration 2) |
+|---|---|
+| Handwritten TOOLS list (JSON dicts) | `@tool` decorator — schema auto-generated |
+| Separate `execute_tool()` dispatcher | No dispatcher — LangChain handles routing |
+| `project` injected in `execute_tool()` | `project` injected via `make_tools(project)` closure |
+| Two things to maintain: function + schema | One thing: the function with a good docstring |
+
+**Files created/changed:**
+- `src/tools.py` — all five tools with `@tool`, `make_tools(project)` factory, helpers inlined
+- `tools/` folder — deleted (consolidated into `src/tools.py`)
+- `DEVELOPER.md` — updated project structure
+
+**Key design decisions:**
+- No hardcoded `PROJECT` — project always comes from the caller
+- No separate `tools/` folder — keep it simple, everything in `src/`
+- `qa/ask.py` not needed — that was the old fixed pipeline, not used in agent approach
+
+**Next:**
+Iteration 3 — Single LangChain Agent. Create `src/agent.py`, bind tools to the model with `llm.bind_tools()`, implement the Reason → Tool → Observe → Reason loop, and compare to the manual `while True` loop from CodeAtlas.
 
 ---
 

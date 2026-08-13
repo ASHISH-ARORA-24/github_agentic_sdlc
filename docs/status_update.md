@@ -7,12 +7,20 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 2 — LangChain Tools
-**Next step:** Define tools with `@tool`, bind to model, understand how LLM decides when to call them
+**Phase:** Iteration 3 — Single LangChain Agent
+**Next step:** Create `src/agent.py`, bind tools to model with `llm.bind_tools()`, implement agent loop
 
 ---
 
 ## Completed Iterations
+
+### ✅ Iteration 2 — LangChain Tools (2026-08-13)
+- Created `src/tools.py` with all five tools using `@tool` decorator
+- Introduced `make_tools(project)` factory — project comes from the request, not hardcoded
+- Learned: `@tool` auto-generates JSON schema from type hints and docstring
+- Learned: closure pattern — tools remember `project` from their creation scope
+- Deleted `tools/` folder — consolidated into `src/tools.py`
+- CodeAtlas comparison: replaces handwritten TOOLS list + `execute_tool()` dispatcher
 
 ### ✅ Iteration 1 — LangChain Model Abstraction (2026-08-13)
 - Added `langchain-openai` to `pyproject.toml`
@@ -31,7 +39,7 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 2 — LangChain Tools
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-13)
 - **Goal:** Understand `@tool` decorator, tool schemas, `model.bind_tools()`, tool invocation
 - **CodeAtlas comparison:** Manual TOOLS list (JSON dicts) in `agents/code_agent.py`
 - **Files to create:** TBD

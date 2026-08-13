@@ -149,7 +149,9 @@ github_agentic_sdlc/
 ├── crawlers/         ← Step 2: AST extraction → JSON
 ├── chunkers/         ← Step 3: JSON → ChromaDB embeddings
 ├── neo4j_loader/     ← Step 4: JSON → Neo4j knowledge graph
-├── tools/            ← reusable wrappers: code_search, graph_tool, file_tool, write_file, run_tests
+├── src/              ← all LangChain code we build in this capstone
+│   ├── llm.py        ← Iteration 1: LangChain model abstraction
+│   └── tools.py      ← Iteration 2: all tools with @tool decorator
 ├── output/           ← generated (gitignored)
 ├── chroma_db/        ← generated (gitignored)
 ├── docs/
