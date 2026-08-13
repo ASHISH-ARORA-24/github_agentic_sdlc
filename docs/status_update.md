@@ -7,8 +7,8 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** GitHub SDLC Tools
-**Next step:** Build src/tools/github.py — create_issue, create_branch, commit, push, create_pr. Then guardrails around those operations.
+**Phase:** Iteration 8 — Observability
+**Next step:** Instrument every agent run with timing, token usage, and cost tracking
 
 ---
 
@@ -69,7 +69,7 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 7 — Evaluation
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-13)
 - **Goal:** Deterministic checks + LLM-as-a-Judge
 - **CodeAtlas comparison:** `evaluation/` folder
 - **Files to create:** TBD

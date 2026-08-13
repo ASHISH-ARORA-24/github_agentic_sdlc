@@ -102,6 +102,63 @@ Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangC
 
 ---
 
+## Iteration 7 — Evaluation ✅
+
+### Step 9 — Built evaluation for all three agents + run_all.py with synthesized report
+
+**What we did:**
+Built a complete evaluation framework for all three agents. Each agent has its own evaluator with two layers — deterministic checks and LLM judge. Added `run_all.py` that runs all three evaluations and feeds the results to the synthesizer for one final evaluation report.
+
+**Files created:**
+- `src/evaluation/test_cases.json` — known test cases for all three agents
+- `src/evaluation/judge.py` — shared LLM judge (scores correctness, quality, logical_order, hallucination 0-5)
+- `src/evaluation/planner_eval.py` — evaluates planner output
+- `src/evaluation/executor_eval.py` — evaluates executor output using trace
+- `src/evaluation/synthesizer_eval.py` — evaluates synthesizer output with known step results
+- `src/evaluation/run_all.py` — runs all three, feeds results to synthesizer for final report
+
+**Also changed:**
+- `src/agents/executor.py` — added `return_trace=True` parameter to capture tools called, files read/written, test results
+
+**Key concepts learned:**
+
+1. **Evaluation is a test suite for AI agents** — same concept as unit tests, different subject. Test cases have inputs and expected outcomes. The evaluator runs the agent and checks if the output matches expectations.
+
+2. **Two layers are mandatory:**
+   - Deterministic: Did the agent call the right tools? Modify the right file? Pass tests? — code can measure this
+   - LLM Judge: Was the answer correct? Grounded? Hallucination-free? — only an LLM can measure this
+
+3. **They can disagree — and that's the point:**
+   - exec_01: Deterministic 100% (called right tools, no writes, no tests) but LLM Judge 3/5 (found wrong function)
+   - Without LLM judge you'd think exec_01 was perfect. It wasn't.
+
+4. **Evaluators can have bugs too:**
+   - Our first `investigate_before_modify` check used `last_investigate` instead of `first_investigate`
+   - False positive — evaluator said FAIL, agent was actually correct
+   - Fixed by using `first_investigate` — always check the evaluator before blaming the agent
+
+5. **The synthesizer can summarize evaluation results** — we reused the existing `synthesize()` function unchanged. Formatted evaluation scores as step results and passed them in. The synthesizer produced a clear, structured evaluation report. One minor confusion: it mixed evaluation tasks with actual code changes. Known limitation.
+
+6. **Trace capture in the executor** — added `return_trace=True` to `run_agent()`. When True, returns `{answer, trace}` where trace has tools_called, files_read, files_written, test_results. The evaluator uses the trace for deterministic checks.
+
+**Test results:**
+
+| Agent | Test | Deterministic | LLM Judge |
+|---|---|---|---|
+| Planner | plan_01 | 100% | 5/5 |
+| Planner | plan_02 | 100% | 5/5 |
+| Executor | exec_01 | 100% | 3/5 — found wrong function |
+| Executor | exec_02 | 100% | 5/5 |
+| Synthesizer | synth_01 | 100% | 5/5 |
+
+**CodeAtlas comparison:**
+Same concept as `evaluation/evaluator.py` + `evaluation/llm_judge.py` in CodeAtlas. Here: per-agent evaluators, shared judge, run_all with synthesized report.
+
+**Next:**
+Iteration 8 — Observability. Instrument every agent run with timing, token usage, and cost tracking.
+
+---
+
 ## Iteration 6 — Guardrails + Project Restructure ✅
 
 ### Step 8 — Built write_files guardrail and restructured entire project

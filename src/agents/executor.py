@@ -31,13 +31,22 @@ from src.memory_store import get_memories
 load_dotenv()
 
 
-def run_agent(project: str, question: str) -> str:
+def run_agent(project: str, question: str, return_trace: bool = False) -> str | dict:
     """
     Runs the agent loop for one question against one project.
 
-    project  — which codebase to search (e.g. "codeatlas/ecommerce")
-    question — the user's natural-language question
+    project      — which codebase to search (e.g. "codeatlas/ecommerce")
+    question     — the user's natural-language question
+    return_trace — if True, returns a dict with answer + trace instead of just the answer
+                   Used by the evaluator to check what tools were called
     """
+    # Trace captures what happened during this agent run
+    trace = {
+        "tools_called":  [],   # all tool names called in order
+        "files_read":    [],   # files passed to read_file
+        "files_written": [],   # files passed to write_file
+        "test_results":  [],   # results from run_tests
+    }
 
     # ── LLM + Tools ───────────────────────────────────────────────────────────
     llm   = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -92,6 +101,8 @@ def run_agent(project: str, question: str) -> str:
         # No tool calls = LLM has enough information — return the final answer
         if not response.tool_calls:
             print("\n--- Agent done ---")
+            if return_trace:
+                return {"answer": response.content, "trace": trace}
             return response.content
 
         # Execute each tool the LLM requested
@@ -112,6 +123,18 @@ def run_agent(project: str, question: str) -> str:
                 result = {"error": str(e)}
 
             print(f"Result      : {str(result)[:200]}...\n")
+
+            # Capture trace — record what each tool did
+            trace["tools_called"].append(tool_name)
+            if tool_name == "read_file":
+                trace["files_read"].append(tool_args.get("file_path"))
+            if tool_name == "write_file" and "error" not in result:
+                trace["files_written"].append(tool_args.get("file_path"))
+            if tool_name == "run_tests":
+                trace["test_results"].append({
+                    "passed":      result.get("passed"),
+                    "return_code": result.get("return_code"),
+                })
 
             # ToolMessage replaces {"role": "tool", "tool_call_id": ..., "content": ...}
             # The tool_call_id links this result back to the specific tool call

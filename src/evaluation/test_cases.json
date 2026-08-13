@@ -1,0 +1,77 @@
+[
+  {
+    "id": "plan_01",
+    "agent": "planner",
+    "task": "Add input validation to reserve_stock to reject negative quantities",
+    "expected_outcome": "Plan should investigate the codebase first, then modify, then test",
+    "checks": {
+      "min_steps": 4,
+      "must_investigate_before_modify": true,
+      "must_have_test_step": true
+    }
+  },
+  {
+    "id": "plan_02",
+    "agent": "planner",
+    "task": "Add a low stock warning when available stock drops below 10 units",
+    "expected_outcome": "Plan should find relevant stock methods, add warning logic, then test",
+    "checks": {
+      "min_steps": 4,
+      "must_investigate_before_modify": true,
+      "must_have_test_step": true
+    }
+  },
+  {
+    "id": "exec_01",
+    "agent": "executor",
+    "project": "codeatlas/ecommerce",
+    "task": "Where is stock reservation implemented and what does it do?",
+    "expected_outcome": "Agent should find reserve_stock in stock_manager.py and explain its logic",
+    "checks": {
+      "must_call_tools": ["search_code"],
+      "must_not_write_files": true,
+      "must_not_run_tests": true
+    }
+  },
+  {
+    "id": "exec_02",
+    "agent": "executor",
+    "project": "codeatlas/ecommerce",
+    "task": "Read the stock_manager.py file and summarise what StockManager does",
+    "expected_outcome": "Agent should read stock_manager.py and summarise the StockManager class",
+    "checks": {
+      "must_call_tools": ["read_file"],
+      "expected_files_read": ["stock_manager.py"],
+      "must_not_write_files": true
+    }
+  },
+  {
+    "id": "synth_01",
+    "agent": "synthesizer",
+    "task": "Add input validation to reserve_stock to reject negative quantities",
+    "expected_outcome": "Summary should mention stock_manager.py, the validation change, and that tests passed",
+    "must_mention": ["stock_manager.py", "reserve_stock", "test"],
+    "step_results": [
+      {
+        "step_id": 1,
+        "action": "Search for reserve_stock in the codebase",
+        "result": "Found reserve_stock method in stock_manager.py inside inventory_service repository"
+      },
+      {
+        "step_id": 2,
+        "action": "Read the implementation of reserve_stock",
+        "result": "The method takes product_id and quantity. It calls _validate_quantity then checks sufficient stock. No validation exists for negative quantities yet."
+      },
+      {
+        "step_id": 3,
+        "action": "Add a conditional check to reject negative quantities",
+        "result": "Added check: if quantity < 0: raise ValueError('Quantity cannot be negative'). File stock_manager.py updated successfully."
+      },
+      {
+        "step_id": 4,
+        "action": "Run the test suite to confirm tests pass",
+        "result": "All 6 tests passed. Including new test_reserve_stock_negative_quantity which confirms ValueError is raised for negative input."
+      }
+    ]
+  }
+]
