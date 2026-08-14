@@ -193,16 +193,21 @@ def make_tools(project: str) -> list:
         repo_root      = (SOURCE_ROOT / project / repo).resolve()
         requested_file = (repo_root / file_path).resolve()
 
-        # Guardrail — never write files while on main or any protected branch
+        # Guardrail — never write files while on a protected branch.
+        # Protected set = {main, master, default_branch from project.yml}.
+        # Delegated to git.py so both files share the same source of truth.
+        from src.tools.git import _protected_branches
         import subprocess as _sp
-        _branch = _sp.run(
+        _branch    = _sp.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             cwd=repo_root, capture_output=True, text=True,
         ).stdout.strip()
-        if _branch in {"main", "master"}:
+        _protected = _protected_branches(project)
+        if _branch in _protected:
             return {
                 "error":  "Write blocked by guardrail.",
-                "reason": f"Cannot write files while on '{_branch}'. Checkout a feature branch first.",
+                "reason": f"Cannot write files while on protected branch '{_branch}'. "
+                          f"Checkout a feature branch first. Protected: {sorted(_protected)}",
             }
 
         try:

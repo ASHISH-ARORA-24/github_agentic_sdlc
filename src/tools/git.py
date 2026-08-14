@@ -10,15 +10,18 @@
 #   push_branch                 → agent pushes to GitHub
 #   sync_with_main              → agent syncs if PR is outdated
 #
-# Guardrail principle: the agent must NEVER work on or commit to main.
-# Every operation that could touch main is blocked with an explicit check.
+# Guardrail principle: the agent must NEVER work on or commit to the default branch.
+# Protected branches = {main, master, default_branch from project.yml}
+#   - main + master are hardcoded safety nets — always blocked no matter what
+#   - default_branch is read from project.yml so protection tracks the actual config
 
 import subprocess
+import yaml
 from pathlib import Path
 from langchain_core.tools import tool
 
-# These branch names are always protected — no commits, writes, or pushes allowed.
-PROTECTED_BRANCHES = {"main", "master"}
+# Hardcoded safety net — always blocked regardless of what project.yml says.
+_HARDCODED_PROTECTED = {"main", "master"}
 
 
 def _repo_path(project: str, repo: str) -> Path:
@@ -27,6 +30,21 @@ def _repo_path(project: str, repo: str) -> Path:
     if not path.exists():
         raise FileNotFoundError(f"Repo not found locally: {path}")
     return path
+
+
+def _protected_branches(project: str) -> set[str]:
+    """
+    Returns the full set of protected branches for this project:
+    hardcoded {main, master} PLUS default_branch from project.yml.
+    Called by every guardrail so protection stays in sync with config.
+    """
+    config_path = Path(f"source/{project}/project.yml")
+    default_branch = "main"
+    if config_path.exists():
+        with open(config_path, "r") as f:
+            config = yaml.safe_load(f)
+            default_branch = config.get("github", {}).get("default_branch", "main")
+    return _HARDCODED_PROTECTED | {default_branch}
 
 
 def _run(cmd: list[str], cwd: Path) -> str:
@@ -53,28 +71,30 @@ def _get_current_branch(cwd: Path) -> str:
     return _run(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd)
 
 
-def _guard_not_on_main(cwd: Path, operation: str) -> None:
+def _guard_not_on_protected(project: str, cwd: Path, operation: str) -> None:
     """
-    Raises if the current branch is main or any protected branch.
+    Raises if the current branch is any protected branch (main, master, default_branch).
     Called before any operation that writes, commits, or modifies code.
     """
-    current = _get_current_branch(cwd)
-    if current in PROTECTED_BRANCHES:
+    current   = _get_current_branch(cwd)
+    protected = _protected_branches(project)
+    if current in protected:
         raise ValueError(
-            f"Guardrail blocked: cannot run '{operation}' while on '{current}'. "
-            f"Checkout a feature branch first."
+            f"Guardrail blocked: cannot run '{operation}' while on protected branch '{current}'. "
+            f"Checkout a feature branch first. Protected: {sorted(protected)}"
         )
 
 
-def _guard_is_on_main(cwd: Path, operation: str) -> None:
+def _guard_is_on_default(project: str, cwd: Path, operation: str) -> None:
     """
-    Raises if the current branch is NOT main.
-    Called before operations that only make sense on main (pull_main).
+    Raises if the current branch is NOT the default branch.
+    Called before operations that only make sense on the default branch (pull_main).
     """
-    current = _get_current_branch(cwd)
-    if current not in PROTECTED_BRANCHES:
+    current   = _get_current_branch(cwd)
+    protected = _protected_branches(project)
+    if current not in protected:
         raise ValueError(
-            f"Guardrail blocked: '{operation}' must be called from main, "
+            f"Guardrail blocked: '{operation}' must be called from the default branch, "
             f"but current branch is '{current}'."
         )
 
@@ -84,7 +104,7 @@ def _guard_is_on_main(cwd: Path, operation: str) -> None:
 @tool
 def checkout_main(project: str, repo: str) -> dict:
     """
-    Switches the local repo to the main branch.
+    Switches the local repo to the default branch (usually main).
     Called at the start of every task to ensure we begin from a clean base.
     """
     cwd = _repo_path(project, repo)
@@ -96,12 +116,12 @@ def checkout_main(project: str, repo: str) -> dict:
 def pull_main(project: str, repo: str) -> dict:
     """
     Pulls the latest commits from origin/main.
-    Must be called while on main — blocked on feature branches.
+    Must be called while on the default branch — blocked on feature branches.
     """
     cwd = _repo_path(project, repo)
 
-    # Guardrail — pull_main only makes sense when on main
-    _guard_is_on_main(cwd, "pull_main")
+    # Guardrail — pull_main only makes sense when on the default branch
+    _guard_is_on_default(project, cwd, "pull_main")
 
     output = _run(["git", "pull", "origin", "main"], cwd)
     return {"repo": repo, "branch": "main", "output": output}
@@ -111,12 +131,14 @@ def pull_main(project: str, repo: str) -> dict:
 def checkout_branch(project: str, repo: str, branch_name: str) -> dict:
     """
     Creates and switches to a new local feature branch.
-    Blocked if branch_name is main or any protected branch.
+    Blocked if branch_name matches any protected branch (main, master, default_branch).
     """
     # Guardrail — cannot checkout a protected branch as a feature branch
-    if branch_name in PROTECTED_BRANCHES:
+    protected = _protected_branches(project)
+    if branch_name in protected:
         raise ValueError(
-            f"Guardrail blocked: cannot use '{branch_name}' as a feature branch."
+            f"Guardrail blocked: cannot use protected branch '{branch_name}' as a feature branch. "
+            f"Protected: {sorted(protected)}"
         )
 
     cwd = _repo_path(project, repo)
@@ -128,7 +150,7 @@ def checkout_branch(project: str, repo: str, branch_name: str) -> dict:
 def commit_changes(project: str, repo: str, message: str) -> dict:
     """
     Stages all changes and commits them locally.
-    Blocked if currently on main — agent must be on a feature branch to commit.
+    Blocked if currently on a protected branch (main, master, default_branch).
     The commit message should describe what was changed and reference the issue.
     """
     # Guardrail — commit message cannot be empty
@@ -137,8 +159,8 @@ def commit_changes(project: str, repo: str, message: str) -> dict:
 
     cwd = _repo_path(project, repo)
 
-    # Guardrail — never commit directly to main
-    _guard_not_on_main(cwd, "commit_changes")
+    # Guardrail — never commit directly to a protected branch
+    _guard_not_on_protected(project, cwd, "commit_changes")
 
     # Stage all changes — picks up everything write_file modified
     _run(["git", "add", "."], cwd)
@@ -159,16 +181,20 @@ def commit_changes(project: str, repo: str, message: str) -> dict:
 def push_branch(project: str, repo: str, branch_name: str) -> dict:
     """
     Pushes the local feature branch to GitHub (origin).
-    Blocked if branch_name is main or if currently on main.
+    Blocked if branch_name is protected or if currently on a protected branch.
     """
     # Guardrail — cannot push to a protected branch name
-    if branch_name in PROTECTED_BRANCHES:
-        raise ValueError(f"Guardrail blocked: cannot push to '{branch_name}' directly.")
+    protected = _protected_branches(project)
+    if branch_name in protected:
+        raise ValueError(
+            f"Guardrail blocked: cannot push to protected branch '{branch_name}'. "
+            f"Protected: {sorted(protected)}"
+        )
 
     cwd = _repo_path(project, repo)
 
-    # Guardrail — current branch must not be main
-    _guard_not_on_main(cwd, "push_branch")
+    # Guardrail — current branch must not be protected
+    _guard_not_on_protected(project, cwd, "push_branch")
 
     output = _run(["git", "push", "origin", branch_name], cwd)
     return {"repo": repo, "branch": branch_name, "output": output}
@@ -179,15 +205,17 @@ def sync_with_main(project: str, repo: str, branch_name: str) -> dict:
     """
     Updates the feature branch with the latest commits from main.
     Called when GitHub reports the branch is out of date with main.
-    Blocked if branch_name is main — cannot sync main with itself.
+    Blocked if branch_name is a protected branch — cannot sync protected with itself.
 
     If merge conflicts are detected — raises immediately.
     The pipeline stops and the human must resolve conflicts manually.
     """
-    # Guardrail — cannot sync main with itself
-    if branch_name in PROTECTED_BRANCHES:
+    # Guardrail — branch_name must not be a protected branch
+    protected = _protected_branches(project)
+    if branch_name in protected:
         raise ValueError(
-            f"Guardrail blocked: cannot sync '{branch_name}' with main — it IS main."
+            f"Guardrail blocked: cannot sync protected branch '{branch_name}' with main. "
+            f"Protected: {sorted(protected)}"
         )
 
     cwd = _repo_path(project, repo)
@@ -195,8 +223,8 @@ def sync_with_main(project: str, repo: str, branch_name: str) -> dict:
     # Ensure we are on the feature branch before merging
     _run(["git", "checkout", branch_name], cwd)
 
-    # Guardrail — confirm we are now on the feature branch, not main
-    _guard_not_on_main(cwd, "sync_with_main")
+    # Guardrail — confirm we are now on the feature branch, not a protected one
+    _guard_not_on_protected(project, cwd, "sync_with_main")
 
     # Step 1 — fetch latest main from GitHub
     _run(["git", "fetch", "origin", "main"], cwd)
