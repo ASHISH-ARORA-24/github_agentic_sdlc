@@ -185,13 +185,25 @@ def make_tools(project: str) -> list:
         Use this only when source code needs to be modified.
         The complete new file content must be provided.
         """
-        # Guardrail — check before touching anything
+        # Guardrail — check sensitive file rules before touching anything
         authorization = authorize_write(project=project, repo=repo, file_path=file_path)
         if authorization["decision"] == "deny":
             return {"error": "Write blocked by guardrail.", "reason": authorization["reason"]}
 
         repo_root      = (SOURCE_ROOT / project / repo).resolve()
         requested_file = (repo_root / file_path).resolve()
+
+        # Guardrail — never write files while on main or any protected branch
+        import subprocess as _sp
+        _branch = _sp.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=repo_root, capture_output=True, text=True,
+        ).stdout.strip()
+        if _branch in {"main", "master"}:
+            return {
+                "error":  "Write blocked by guardrail.",
+                "reason": f"Cannot write files while on '{_branch}'. Checkout a feature branch first.",
+            }
 
         try:
             requested_file.relative_to(repo_root)
