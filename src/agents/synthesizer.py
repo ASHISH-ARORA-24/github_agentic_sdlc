@@ -18,10 +18,10 @@
 #   Same as agents/synthesizer.py in CodeAtlas.
 
 
-import json
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+from src.observability.tracer import new_trace, record_llm_call, finish_trace
 
 load_dotenv()
 
@@ -43,17 +43,20 @@ Do not repeat raw output. Summarize it clearly for a developer to read.
 """
 
 
-def synthesize(task: str, results: list[dict]) -> str:
+def synthesize(task: str, results: list[dict], obs: dict = None) -> str:
     """
     Takes the task and all step results from state and produces
     one clean final summary using the LLM.
 
-    task    — the original user request
-    results — list of {step_id, action, result} dicts from state["results"]
+    obs — optional shared observability trace from the orchestrator.
+          If not provided, creates a standalone trace (for direct testing).
     """
+    standalone = obs is None
+    if standalone:
+        obs = new_trace()
+
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
-    # Format all step results into readable text for the LLM
     steps_text = "\n\n".join(
         f"Step {r['step_id']}: {r['action']}\nResult: {r['result']}"
         for r in results
@@ -73,4 +76,9 @@ Step-by-step results:
     ]
 
     response = llm.invoke(messages)
+    record_llm_call(obs, response)      # ← record token usage + cost
+
+    if standalone:
+        finish_trace(obs)
+
     return response.content

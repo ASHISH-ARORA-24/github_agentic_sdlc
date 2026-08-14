@@ -21,10 +21,12 @@
 #   PYTHONPATH=. uv run python3 src/orchestrator.py "codeatlas/ecommerce" "Add validation to reserve_stock"
 
 import sys
-from src.agents.planner import create_plan
-from src.state          import create_state
-from src.agents.executor import run_agent
+from src.agents.planner     import create_plan
+from src.state              import create_state
+from src.agents.executor    import run_agent
 from src.agents.synthesizer import synthesize
+from src.observability.tracer   import new_trace, finish_trace
+from src.observability.reporter import print_report
 
 
 def run_orchestrator(project: str, task: str) -> dict:
@@ -43,11 +45,12 @@ def run_orchestrator(project: str, task: str) -> dict:
     print(f"Project : {project}")
     print(f"Task    : {task}")
 
+    # One shared observability trace for the entire task — planner + all executor steps + synthesizer
+    obs = new_trace()
+
     # ── Step 1: Plan ──────────────────────────────────────────────────────────
-    # Ask the planner agent to break the task into steps.
-    # The orchestrator doesn't call an LLM here — planner_agent does that.
     print("\n--- Planning ---")
-    plan = create_plan(task)
+    plan = create_plan(task, obs=obs)   # ← pass shared trace
 
     print(f"Goal  : {plan['goal']}")
     print(f"Steps :")
@@ -83,7 +86,7 @@ def run_orchestrator(project: str, task: str) -> dict:
 
         # Call the agent — no state dict passed, just project + question
         question = step_action + context
-        result   = run_agent(project=project, question=question)
+        result   = run_agent(project=project, question=question, obs=obs)  # ← shared trace
 
         # Orchestrator updates state — agent never touches state directly
         state["results"].append({
@@ -99,14 +102,20 @@ def run_orchestrator(project: str, task: str) -> dict:
     # Ask the synthesizer to produce one clean final answer from all step results.
     # The orchestrator doesn't call an LLM here — synthesizer does that.
     print("\n--- Synthesizing final answer ---")
-    final_answer = synthesize(task=task, results=state["results"])
+    final_answer = synthesize(task=task, results=state["results"], obs=obs)  # ← shared trace
     state["final_answer"] = final_answer
     state["status"]       = "completed"
+
+    # ── Step 5: Print observability report ───────────────────────────────────
+    finish_trace(obs)
+    state["obs"] = obs
 
     print(f"\n{'='*60}")
     print(f"FINAL ANSWER")
     print(f"{'='*60}")
     print(final_answer)
+
+    print_report(obs, task=task)
 
     return state
 

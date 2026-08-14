@@ -23,6 +23,7 @@ import json
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
+from src.observability.tracer import new_trace, record_llm_call, finish_trace
 
 load_dotenv()
 
@@ -51,14 +52,17 @@ Return your plan as JSON only, in this exact format:
 """
 
 
-def create_plan(task: str) -> dict:
+def create_plan(task: str, obs: dict = None) -> dict:
     """
     Takes a task description and returns a structured plan.
-    The plan contains a goal and an ordered list of steps.
 
-    No tools — pure LLM reasoning. The SystemMessage tells the LLM
-    how to think about tasks. The HumanMessage is the actual task.
+    obs — optional shared observability trace from the orchestrator.
+          If not provided, creates a standalone trace (for direct testing).
     """
+    standalone = obs is None
+    if standalone:
+        obs = new_trace()
+
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
     messages = [
@@ -67,10 +71,12 @@ def create_plan(task: str) -> dict:
     ]
 
     response = llm.invoke(messages)
+    record_llm_call(obs, response)      # ← record token usage + cost
 
-    # Parse the JSON plan the LLM returned
+    if standalone:
+        finish_trace(obs)
+
     plan = json.loads(response.content)
-
     return plan
 
 

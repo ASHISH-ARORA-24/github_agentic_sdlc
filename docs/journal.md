@@ -102,6 +102,120 @@ Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangC
 
 ---
 
+## Iteration 9 — Specialist Agents ✅
+
+### Step 11 — Confirmed specialist roles and restructured tools into a package
+
+**What we did:**
+Confirmed that the existing agents already satisfy the specialist agent pattern. Each agent has exactly one responsibility and no overlap. Restructured `src/tools/` into a proper Python package to prepare for future specialist tool sets (GitHub tools, test tools, etc.).
+
+**Files created/changed:**
+- `src/tools/codebase.py` — was `src/tools.py`, renamed to describe the domain it serves
+- `src/tools/__init__.py` — re-exports `make_tools` so all existing imports continue to work unchanged. Comment explains how GitHub tools will be added here when the time comes.
+
+**The three specialist agents:**
+
+| Agent | File | Responsibility | Tools? |
+|---|---|---|---|
+| Planner | `src/agents/planner.py` | Break task into ordered steps | None — pure LLM reasoning |
+| Executor | `src/agents/executor.py` | Run one step using tools | Yes — search, read, write, test |
+| Synthesizer | `src/agents/synthesizer.py` | Summarize all results into final answer | None — pure LLM reasoning |
+
+**Key concept — single responsibility:**
+Each agent does exactly one thing. The planner plans. The executor executes. The synthesizer synthesizes. None of them does two jobs. This is the same principle as single-responsibility functions — agents that try to plan AND execute are hard to test, hard to replace, and hard to reason about.
+
+**Why package `src/tools/`:**
+When GitHub tools arrive (create_issue, create_branch, commit, push, create_pr), they will live in `src/tools/github.py`. The `__init__.py` will combine them:
+```python
+from src.tools.codebase import make_code_tools
+from src.tools.github   import make_github_tools
+def make_tools(project): return make_code_tools(project) + make_github_tools(project)
+```
+This is extensible without touching any agent code — just add a new tools file and update `__init__.py`.
+
+**CodeAtlas comparison:**
+Same concept as `multi_agent_demo/` in CodeAtlas (planner, analyst, coder, reviewer). Here the implementation is simpler — three roles instead of five, cleaner separation, tools packaged for extensibility.
+
+**Next:**
+Iteration 10 — Multi-Agent Orchestration. Agent registry, common contract, routing, shared state, agent independence.
+
+---
+
+## Iteration 8 — Observability ✅
+
+### Step 10 — Built tracer + reporter and instrumented all three agents
+
+**What we did:**
+Built a lightweight observability layer that captures every LLM call and tool call during an agent run — tokens used, cost incurred, duration, and success/failure. Wired it into all three agents and the orchestrator so one shared trace covers the entire task.
+
+**Files created:**
+- `src/observability/__init__.py` — empty, makes it a proper Python package
+- `src/observability/tracer.py` — four functions: `new_trace()`, `record_llm_call()`, `record_tool_call()`, `finish_trace()`
+- `src/observability/reporter.py` — `print_report()` — prints a human-readable timeline + summary
+
+**Files changed:**
+- `src/agents/planner.py` — accepts `obs` kwarg, records its LLM call
+- `src/agents/executor.py` — accepts `obs` kwarg, records every LLM call and every tool call
+- `src/agents/synthesizer.py` — accepts `obs` kwarg, records its LLM call
+- `src/orchestrator.py` — creates one shared `obs`, passes it to all agents, calls `finish_trace()` + `print_report()` at the end
+
+**Key design decision — one shared trace per task:**
+The orchestrator creates `obs = new_trace()` once and passes it to planner, executor (for every step), and synthesizer. All events accumulate in the same trace dict. This means the final report shows every LLM call and tool call from the entire task — not just one step.
+
+If no `obs` is passed (e.g. running an agent standalone for testing), the agent creates its own trace and finishes it locally. The same agents work standalone or as part of the orchestrator — no code change needed.
+
+**How token usage is read:**
+LangChain returns token counts in `response.response_metadata["token_usage"]`:
+```python
+usage             = response.response_metadata.get("token_usage", {})
+prompt_tokens     = usage.get("prompt_tokens", 0)
+completion_tokens = usage.get("completion_tokens", 0)
+```
+In CodeAtlas this was `response.usage.prompt_tokens` from the raw OpenAI response.
+
+**Pricing used (GPT-4o-mini):**
+- Input: $0.150 per 1M tokens
+- Output: $0.600 per 1M tokens
+
+**What the report looks like:**
+```
+============================================================
+OBSERVABILITY REPORT
+============================================================
+Task : Add validation to reserve_stock
+
+TIMELINE
+------------------------------------------------------------
+1. LLM Call
+   Tokens  : 850 in + 220 out = 1070 total
+   Cost    : $0.00025950
+
+2. search_code  ✓
+   Duration: 142.30 ms
+
+3. LLM Call
+   Tokens  : 1200 in + 180 out = 1380 total
+   Cost    : $0.00028800
+
+------------------------------------------------------------
+SUMMARY
+------------------------------------------------------------
+  Total Duration : 8.421 sec
+  LLM Calls      : 6
+  Tool Calls      : 9
+  Total Tokens   : 7840
+  Estimated Cost : $0.00234840
+============================================================
+```
+
+**CodeAtlas comparison:**
+Same concept as `observability/trace_reporter.py` in CodeAtlas. The difference: CodeAtlas recorded events as manually constructed dicts in `agents/code_agent.py`. Here, events go through dedicated `record_llm_call()` and `record_tool_call()` functions in `tracer.py` — cleaner separation of concerns.
+
+**Next:**
+Iteration 9 — Specialist Agents. Confirm and document the specialist roles established in the architecture.
+
+---
+
 ## Iteration 7 — Evaluation ✅
 
 ### Step 9 — Built evaluation for all three agents + run_all.py with synthesized report

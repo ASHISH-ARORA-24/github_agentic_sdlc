@@ -7,12 +7,26 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 8 — Observability
-**Next step:** Instrument every agent run with timing, token usage, and cost tracking
+**Phase:** Iteration 10 — Multi-Agent Orchestration
+**Next step:** Agent registry, common contract, routing, shared state, agent independence
 
 ---
 
 ## Completed Iterations
+
+### ✅ Iteration 9 — Specialist Agents (2026-08-14)
+- Confirmed specialist agent roles: planner (plan only), executor (run tools + agent loop), synthesizer (summarize only)
+- Restructured `src/tools/` into a package (`codebase.py` + `__init__.py`) to support future GitHub tools alongside codebase tools
+- Each agent has exactly one responsibility — no agent does two jobs
+- CodeAtlas comparison: replaces `multi_agent_demo/` where agents were loosely coupled
+
+### ✅ Iteration 8 — Observability (2026-08-14)
+- Created `src/observability/tracer.py` — `new_trace()`, `record_llm_call()`, `record_tool_call()`, `finish_trace()`
+- Created `src/observability/reporter.py` — `print_report()` prints a human-readable timeline + summary
+- Instrumented planner, executor, and synthesizer to record LLM calls via shared `obs` trace
+- Orchestrator creates one shared trace, passes it through all agents, prints report at end
+- Per-call token usage and cost read from `response.response_metadata["token_usage"]`
+- CodeAtlas comparison: replaces `observability/trace_reporter.py` and manual event dicts in `agents/code_agent.py`
 
 ### ✅ Iteration 2 — LangChain Tools (2026-08-13)
 - Created `src/tools.py` with all five tools using `@tool` decorator
@@ -75,16 +89,16 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Files to create:** TBD
 
 ### Iteration 8 — Observability / Tracing
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-14)
 - **Goal:** Per-LLM-call latency, per-tool latency, tokens, cost, failures. LangSmith comparison.
 - **CodeAtlas comparison:** `observability/trace_reporter.py`, events in `agents/code_agent.py`
-- **Files to create:** TBD
+- **Files created:** `src/observability/tracer.py`, `src/observability/reporter.py`
 
 ### Iteration 9 — Specialist Agents
-- **Status:** 🔲 Not started
+- **Status:** ✅ Complete (2026-08-14)
 - **Goal:** Planner, Analyst, Coder, Tester, Reviewer — each with one clear responsibility
 - **CodeAtlas comparison:** `multi_agent_demo/` folder
-- **Files to create:** TBD
+- **Files created:** `src/tools/codebase.py`, `src/tools/__init__.py`
 
 ### Iteration 10 — Multi-Agent Orchestration
 - **Status:** 🔲 Not started

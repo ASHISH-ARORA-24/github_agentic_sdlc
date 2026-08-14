@@ -21,17 +21,19 @@
 
 import sys
 import json
+import time
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
 from src.tools import make_tools
 from src.memory_store import get_memories
+from src.observability.tracer import new_trace, record_llm_call, record_tool_call, finish_trace
 
 load_dotenv()
 
 
-def run_agent(project: str, question: str, return_trace: bool = False) -> str | dict:
+def run_agent(project: str, question: str, return_trace: bool = False, obs: dict = None) -> str | dict:
     """
     Runs the agent loop for one question against one project.
 
@@ -41,12 +43,18 @@ def run_agent(project: str, question: str, return_trace: bool = False) -> str | 
                    Used by the evaluator to check what tools were called
     """
     # Trace captures what happened during this agent run
+    # — tool calls, files, test results (for evaluation)
+    # — LLM calls, timing, tokens, cost (for observability)
     trace = {
-        "tools_called":  [],   # all tool names called in order
-        "files_read":    [],   # files passed to read_file
-        "files_written": [],   # files passed to write_file
-        "test_results":  [],   # results from run_tests
+        "tools_called":  [],
+        "files_read":    [],
+        "files_written": [],
+        "test_results":  [],
     }
+    # If obs is passed from orchestrator, use it. Otherwise create standalone.
+    standalone_obs = obs is None
+    if standalone_obs:
+        obs = new_trace()
 
     # ── LLM + Tools ───────────────────────────────────────────────────────────
     llm   = ChatOpenAI(model="gpt-4o-mini", temperature=0)
@@ -94,15 +102,18 @@ def run_agent(project: str, question: str, return_trace: bool = False) -> str | 
     print("\n--- Agent starting ---\n")
 
     while True:
-        # Call the LLM — returns an AIMessage
+        # Call the LLM — record timing and token usage
         response = llm_with_tools.invoke(messages)
         messages.append(response)
+        record_llm_call(obs, response)   # ← observability: tokens + cost
 
         # No tool calls = LLM has enough information — return the final answer
         if not response.tool_calls:
             print("\n--- Agent done ---")
+            if standalone_obs:
+                finish_trace(obs)
             if return_trace:
-                return {"answer": response.content, "trace": trace}
+                return {"answer": response.content, "trace": trace, "obs": obs}
             return response.content
 
         # Execute each tool the LLM requested
@@ -113,14 +124,18 @@ def run_agent(project: str, question: str, return_trace: bool = False) -> str | 
             print(f"Tool called : {tool_name}")
             print(f"Arguments   : {tool_args}")
 
-            # Call the actual tool function.
-            # Catch errors and return them to the LLM instead of crashing.
-            # The LLM can then self-correct — e.g. retry with the right file path.
-            tool_fn = tool_by_name[tool_name]
+            # Call the actual tool function — record timing
+            tool_fn    = tool_by_name[tool_name]
+            tool_start = time.perf_counter()
             try:
-                result = tool_fn.invoke(tool_args)
+                result  = tool_fn.invoke(tool_args)
+                success = "error" not in result if isinstance(result, dict) else True
             except Exception as e:
-                result = {"error": str(e)}
+                result  = {"error": str(e)}
+                success = False
+
+            duration_ms = (time.perf_counter() - tool_start) * 1000
+            record_tool_call(obs, tool_name, duration_ms, success)  # ← observability
 
             print(f"Result      : {str(result)[:200]}...\n")
 
