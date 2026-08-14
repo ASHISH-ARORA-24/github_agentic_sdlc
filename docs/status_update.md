@@ -7,8 +7,8 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** Iteration 10 — Multi-Agent Orchestration
-**Next step:** Agent registry, common contract, routing, shared state, agent independence
+**Phase:** GitHub SDLC Tools
+**Next step:** Build src/tools/git.py — local git operations (checkout, pull, commit, push)
 
 ---
 
@@ -93,6 +93,17 @@ It is also read at the start of every conversation so Claude knows exactly where
 - **Goal:** Per-LLM-call latency, per-tool latency, tokens, cost, failures. LangSmith comparison.
 - **CodeAtlas comparison:** `observability/trace_reporter.py`, events in `agents/code_agent.py`
 - **Files created:** `src/observability/tracer.py`, `src/observability/reporter.py`
+
+### GitHub SDLC Tools — Phase 1 (2026-08-14)
+- **Status:** ✅ Complete
+- `src/tools/github.py` — all GitHub REST API tools built with guardrails:
+  - Issues: `create_issue`, `add_comment_to_issue`, `close_issue` (orchestrator only)
+  - Branches: `create_branch`, `delete_branch`
+  - PRs: `create_pr`, `get_pr`, `get_pr_diff`, `update_pr`, `close_pr`, `merge_pr` (orchestrator only)
+- `src/hitl/approve_pr.py` — human approval gate, blocks pipeline until human types APPROVE/REJECT
+- `source/codeatlas/ecommerce/project.yml` — repo URLs, board URL, column names, issues_repo
+- Guardrails: naming convention, empty field checks, PR link check, merge safety, branch protection
+- **Next:** `src/tools/git.py` — local git operations (checkout, pull, commit, push)
 
 ### Iteration 9 — Specialist Agents
 - **Status:** ✅ Complete (2026-08-14)
