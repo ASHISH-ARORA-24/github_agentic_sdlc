@@ -185,6 +185,13 @@ def make_tools(project: str) -> list:
         Use this only when source code needs to be modified.
         The complete new file content must be provided.
         """
+        # Guardrail — repo must be a declared service repo (blocks typos + issues_repo)
+        from src.tools.git import validate_service_repo, _protected_branches
+        try:
+            validate_service_repo(project, repo)
+        except ValueError as e:
+            return {"error": "Write blocked by guardrail.", "reason": str(e)}
+
         # Guardrail — check sensitive file rules before touching anything
         authorization = authorize_write(project=project, repo=repo, file_path=file_path)
         if authorization["decision"] == "deny":
@@ -196,7 +203,6 @@ def make_tools(project: str) -> list:
         # Guardrail — never write files while on a protected branch.
         # Protected set = {main, master, default_branch from project.yml}.
         # Delegated to git.py so both files share the same source of truth.
-        from src.tools.git import _protected_branches
         import subprocess as _sp
         _branch    = _sp.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -228,13 +234,35 @@ def make_tools(project: str) -> list:
         Run pytest inside a repository and return whether tests passed or failed.
         Use this after modifying code to validate the change.
         """
+        # Guardrail — repo must be a declared service repo
+        from src.tools.git import validate_service_repo
+        validate_service_repo(project, repo)
+
         repo_root = (SOURCE_ROOT / project / repo).resolve()
 
         if not repo_root.exists():
             raise FileNotFoundError(f"Repository not found: {repo}")
 
+        # Guardrail — command must start with pytest
         if not test_command.startswith("pytest"):
             raise ValueError("Only pytest commands are allowed.")
+
+        # Guardrail — allowlist of safe pytest flags. Any other flag is rejected.
+        # Non-flag args are treated as test paths and must stay inside the repo.
+        ALLOWED_FLAGS = {"-q", "-v", "-x", "-s", "-vv"}
+        for arg in test_command.split()[1:]:  # skip 'pytest' itself
+            if arg.startswith("-"):
+                if arg not in ALLOWED_FLAGS:
+                    raise ValueError(
+                        f"Guardrail blocked: pytest flag '{arg}' not allowed. "
+                        f"Allowed flags: {sorted(ALLOWED_FLAGS)}"
+                    )
+            else:
+                # Non-flag arg — must be a relative test path, no traversal
+                if arg.startswith("/") or ".." in arg:
+                    raise ValueError(
+                        f"Guardrail blocked: test path '{arg}' must be a relative path inside the repo."
+                    )
 
         env               = os.environ.copy()
         env["PYTHONPATH"] = str(SOURCE_ROOT.resolve())

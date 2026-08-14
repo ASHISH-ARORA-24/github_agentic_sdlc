@@ -13,6 +13,9 @@ import requests
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 
+# Shared config validators — single source of truth in git.py
+from src.tools.git import validate_service_repo
+
 load_dotenv()
 
 # Operations are implemented one by one below.
@@ -184,15 +187,33 @@ def create_branch(project: str, repo: str, branch_name: str) -> dict:
     Branch naming convention: feat/issue-{number}-{short-title}-agent
     The -agent suffix makes agent-created branches visible and auditable in the repo.
     """
+    # Guardrail — repo must be a declared service repo (blocks typos + issues_repo)
+    validate_service_repo(project, repo)
+
     config         = load_project_config(project)
     default_branch = config["github"]["default_branch"]
+    issues_repo    = config["github"]["issues_repo"]
 
     # Guardrail — enforce naming convention so agent branches are always identifiable.
     # Prefix is decided by the LLM (feat, fix, hotfix, docs, test, etc.)
     # but issue number and -agent suffix are mandatory.
-    if not re.match(r"^[a-z]+/issue-\d+-.+-agent$", branch_name):
+    match = re.match(r"^[a-z]+/issue-(\d+)-.+-agent$", branch_name)
+    if not match:
         raise ValueError(
             f"Branch name '{branch_name}' must follow pattern: {{type}}/issue-{{number}}-{{short-title}}-agent"
+        )
+    branch_issue_number = int(match.group(1))
+
+    # Guardrail — verify the issue actually exists in the issues_repo before creating a branch
+    # Prevents branches named after fabricated issue numbers.
+    issue_check = requests.get(
+        f"{GITHUB_API}/repos/{config['github']['owner']}/{issues_repo}/issues/{branch_issue_number}",
+        headers=github_headers(),
+    )
+    if issue_check.status_code == 404:
+        raise ValueError(
+            f"Guardrail blocked: issue #{branch_issue_number} does not exist in '{issues_repo}'. "
+            f"Create the issue first before branching."
         )
 
     # Step 1 — get the SHA of the latest commit on main
@@ -232,6 +253,8 @@ def delete_branch(project: str, repo: str, branch_name: str) -> dict:
     Deletes a remote branch from the given service repo.
     Normally handled automatically by GitHub after merge — use this as a fallback.
     """
+    validate_service_repo(project, repo)
+
     config         = load_project_config(project)
     default_branch = config["github"]["default_branch"]
 
@@ -263,6 +286,9 @@ def create_pr(project: str, repo: str, title: str, body: str, branch: str) -> di
     Returns pr_number and url — shared with the user during the HITL step.
     REST: POST /repos/{owner}/{repo}/pulls
     """
+    # Guardrail — repo must be a declared service repo
+    validate_service_repo(project, repo)
+
     config         = load_project_config(project)
     default_branch = config["github"]["default_branch"]
 
@@ -271,8 +297,21 @@ def create_pr(project: str, repo: str, title: str, body: str, branch: str) -> di
         raise ValueError(f"Cannot create a PR from '{branch}' — PRs must come from a feature branch.")
 
     # Guardrail — body must include "Closes #" to auto-link the issue
-    if "Closes #" not in body:
+    body_match = re.search(r"Closes #(\d+)", body)
+    if not body_match:
         raise ValueError("PR body must include 'Closes #{issue_number}' to link the issue.")
+
+    # Guardrail — PR issue number must match the branch's issue number.
+    # Extract from branch (feat/issue-42-...) and from body (Closes #42).
+    branch_match = re.match(r"^[a-z]+/issue-(\d+)-.+-agent$", branch)
+    if branch_match:
+        branch_issue = int(branch_match.group(1))
+        body_issue   = int(body_match.group(1))
+        if branch_issue != body_issue:
+            raise ValueError(
+                f"Guardrail blocked: PR body says 'Closes #{body_issue}' but branch is for issue #{branch_issue}. "
+                f"Issue numbers must match."
+            )
 
     # Guardrail — base is always the default branch, never anything else
     # Not a parameter — read from config so the LLM cannot change it
@@ -304,6 +343,7 @@ def get_pr(project: str, repo: str, pr_number: int) -> dict:
     Used to check PR status before taking action.
     REST: GET /repos/{owner}/{repo}/pulls/{pr_number}
     """
+    validate_service_repo(project, repo)
     config = load_project_config(project)
 
     data = github_request(
@@ -330,6 +370,7 @@ def get_pr_diff(project: str, repo: str, pr_number: int) -> list:
     Used by the Reviewer agent to read exactly what changed before deciding APPROVED or REJECTED.
     REST: GET /repos/{owner}/{repo}/pulls/{pr_number}/files
     """
+    validate_service_repo(project, repo)
     config = load_project_config(project)
 
     files = github_request(
@@ -360,6 +401,7 @@ def update_pr(project: str, repo: str, pr_number: int, title: str = None, body: 
     if not title and not body:
         raise ValueError("update_pr requires at least one of title or body.")
 
+    validate_service_repo(project, repo)
     config  = load_project_config(project)
     payload = {}
 
@@ -397,6 +439,7 @@ def close_pr(project: str, repo: str, pr_number: int, reason: str) -> dict:
     if not reason or not reason.strip():
         raise ValueError("A reason must be provided when closing a PR without merging.")
 
+    validate_service_repo(project, repo)
     config = load_project_config(project)
 
     # Guardrail — cannot close an already merged PR
@@ -439,6 +482,9 @@ def merge_pr(project: str, repo: str, pr_number: int) -> dict:
     The LLM can never trigger this directly.
     REST: PUT /repos/{owner}/{repo}/pulls/{pr_number}/merge
     """
+    # Guardrail — repo must be a declared service repo
+    validate_service_repo(project, repo)
+
     config = load_project_config(project)
 
     # Guardrail — check PR is open and mergeable before attempting merge
@@ -449,6 +495,15 @@ def merge_pr(project: str, repo: str, pr_number: int) -> dict:
         raise ValueError(f"PR #{pr_number} is closed — cannot merge a closed PR.")
     if pr_data.get("mergeable") is False:
         raise ValueError(f"PR #{pr_number} has conflicts and cannot be merged. Resolve conflicts first.")
+
+    # Guardrail — only merge PRs whose branch follows agent naming convention.
+    # Prevents accidentally merging a human's manual PR that happens to be open.
+    branch_ref = pr_data["head"]["ref"]
+    if not branch_ref.endswith("-agent"):
+        raise ValueError(
+            f"Guardrail blocked: PR #{pr_number} branch '{branch_ref}' does not end with '-agent'. "
+            f"Only merge PRs created by the agent pipeline."
+        )
 
     data = github_request(
         method="PUT",
