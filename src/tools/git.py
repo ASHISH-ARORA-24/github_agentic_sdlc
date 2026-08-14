@@ -1,19 +1,21 @@
 # Local Git Operations
 #
 # Runs git commands inside the local service repo directories.
-# These are NOT @tool — the LLM never calls these directly.
-# The orchestrator calls them at fixed points in the SDLC pipeline:
+# All operations are @tool — the agent owns the full git workflow:
 #
-#   Task start   → checkout_main + pull_main       (ensure clean base)
-#   After plan   → checkout_branch                  (switch to feature branch)
-#   After code   → commit_changes + push_branch     (send changes to GitHub)
-#   PR outdated  → sync_with_main                   (merge main into branch)
+#   checkout_main + pull_main   → start from clean base
+#   checkout_branch             → switch to feature branch
+#   write_file (codebase tool)  → agent writes code
+#   commit_changes              → agent commits when done
+#   push_branch                 → agent pushes to GitHub
+#   sync_with_main              → agent syncs if PR is outdated
 #
 # All functions run subprocess commands inside source/{project}/{repo}/
 # and raise RuntimeError with clear messages on failure.
 
 import subprocess
 from pathlib import Path
+from langchain_core.tools import tool
 
 
 def _repo_path(project: str, repo: str) -> Path:
@@ -45,6 +47,7 @@ def _run(cmd: list[str], cwd: Path) -> str:
 
 # ── Operations ────────────────────────────────────────────────────────────────
 
+@tool
 def checkout_main(project: str, repo: str) -> dict:
     """
     Switches the local repo to the main branch.
@@ -55,6 +58,7 @@ def checkout_main(project: str, repo: str) -> dict:
     return {"repo": repo, "branch": "main", "status": "checked out"}
 
 
+@tool
 def pull_main(project: str, repo: str) -> dict:
     """
     Pulls the latest commits from origin/main into the local main branch.
@@ -65,6 +69,7 @@ def pull_main(project: str, repo: str) -> dict:
     return {"repo": repo, "branch": "main", "output": output}
 
 
+@tool
 def checkout_branch(project: str, repo: str, branch_name: str) -> dict:
     """
     Creates and switches to a new local feature branch.
@@ -76,6 +81,7 @@ def checkout_branch(project: str, repo: str, branch_name: str) -> dict:
     return {"repo": repo, "branch": branch_name, "status": "checked out"}
 
 
+@tool
 def commit_changes(project: str, repo: str, message: str) -> dict:
     """
     Stages all changes and commits them locally.
@@ -103,6 +109,7 @@ def commit_changes(project: str, repo: str, message: str) -> dict:
     return {"repo": repo, "message": message, "output": output}
 
 
+@tool
 def push_branch(project: str, repo: str, branch_name: str) -> dict:
     """
     Pushes the local feature branch to GitHub (origin).
@@ -118,6 +125,7 @@ def push_branch(project: str, repo: str, branch_name: str) -> dict:
     return {"repo": repo, "branch": branch_name, "output": output}
 
 
+@tool
 def sync_with_main(project: str, repo: str, branch_name: str) -> dict:
     """
     Updates the feature branch with the latest commits from main.
