@@ -102,6 +102,46 @@ Iteration 2 — LangChain Tools. Define tools with `@tool`, understand how LangC
 
 ---
 
+## Architecture — GitHub Agentic SDLC Process Design
+
+### Step 12 — Defined the end-to-end SDLC lifecycle
+
+**What we did:**
+Designed the full end-to-end process for the agentic GitHub SDLC pipeline before writing any code. Started from a user-proposed sequence and refined it together — adding missing failure paths, a retry loop, and correcting the ordering of two steps.
+
+**The finalized 20-step sequence is in:**
+`docs/notes/sdlc_process.md`
+
+**What was added to the original sequence:**
+
+1. **Test failure retry loop** — if tests fail after coding, the agent fixes and re-tests up to 3 times. After 3 failures it stops and flags the human. Without this, the pipeline would commit broken code.
+
+2. **Human rejection path** — the original sequence only had a "yes" path for the human approval step. Added a "no" path: human gives feedback, pipeline returns to Code (step 9) with that feedback, re-tests, re-commits, re-pushes, agent re-reviews.
+
+3. **Close GitHub issue** — after merge, the originating issue must be closed. Missing from the original sequence.
+
+4. **Optional branch cleanup** — delete the feature branch after merge. Good hygiene but optional.
+
+5. **Reordered: Create PR before board move** — original had board move to In Review before creating the PR. Corrected: create PR first, agent reviews the actual PR diff, then move the board to In Review. This way the board only reflects In Review when a human-ready PR actually exists.
+
+**Board column mapping:**
+- Backlog → when issue is created
+- Ready → when issue is understood and feasible
+- In Progress → when branch is created and work begins
+- In Review → when PR is created and agent has approved it
+- Done → when PR is merged and issue is closed
+
+**New tools identified (not yet built):**
+`create_issue`, `update_board_status`, `create_branch`, `commit_changes`, `push_branch`, `create_pr`, `get_pr_diff`, `approve_and_merge`, `close_issue`, `delete_branch`
+
+**Key insight:**
+Designing the process before writing agents prevents a common mistake — building agents for the happy path and discovering the failure paths only when things break in testing. The retry loops and rejection paths are just as important as the main sequence.
+
+**Next:**
+Start building the GitHub tools (`src/tools/github.py`) — the new tools identified above. Nothing in the SDLC pipeline can move without them.
+
+---
+
 ## Iteration 9 — Specialist Agents ✅
 
 ### Step 11 — Confirmed specialist roles and restructured tools into a package

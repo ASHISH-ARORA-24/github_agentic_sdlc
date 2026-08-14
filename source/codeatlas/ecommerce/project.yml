@@ -1,0 +1,37 @@
+# project.yml — GitHub Agentic SDLC Configuration
+#
+# This file tells the agents where to push code, where to create PRs,
+# and which project board to update.
+#
+# What goes here: URLs and configuration — not secrets.
+# What goes in .env: GITHUB_TOKEN — the API key to authenticate calls.
+
+project: codeatlas/ecommerce
+
+github:
+  # GitHub account that owns all repos and the project board.
+  owner: ASHISH-ARORA-24
+
+  # GitHub URLs for each repository in this project.
+  # Agents use these to create branches, commit, push, and open PRs.
+  repos:
+    inventory_service: https://github.com/ASHISH-ARORA-24/inventory_service
+    order_service: https://github.com/ASHISH-ARORA-24/order_service
+
+  # GitHub Project board.
+  # project_number is used by the GitHub GraphQL API to move cards between columns.
+  # project_board_url is the human-readable link shared with the user during HITL step.
+  project_number: 7
+  project_board_url: https://github.com/users/ASHISH-ARORA-24/projects/7/views/1
+
+  # The branch that PRs will target.
+  default_branch: main
+
+  # Column names on the project board — must match exactly what is in GitHub.
+  # Column names must match GitHub exactly — checked via GraphQL API.
+  board_columns:
+    backlog: Backlog
+    ready: Ready
+    in_progress: In progress
+    in_review: In review
+    done: Done
