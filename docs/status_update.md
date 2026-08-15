@@ -7,8 +7,14 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** GitHub SDLC Tools
-**Next step:** Build src/tools/git.py — local git operations (checkout, pull, commit, push)
+**Phase:** SDLC Agents
+**Next step:** Build `src/sdlc_orchestrator.py` as the pipeline spine. Build each agent (analyst, coder, reviewer) as the orchestrator reaches that step — analyst first, then coder, then reviewer.
+
+### What was decided in the last session (2026-08-15)
+- Three new specialist agents needed: **Analyst** (read-only codebase tools), **Coder** (write + git tools, owns test retry loop), **Reviewer** (get_pr_diff only)
+- Orchestrator calls non-reasoning steps directly as Python (create_issue, move_task, create_branch, create_pr, merge_pr, close_issue, etc.) — no agent needed for mechanical API calls
+- Full pipeline flow chart with all decision branches documented in `docs/notes/sdlc_process.md`
+- Build order: orchestrator spine first → build each agent as its step is reached
 
 ---
 

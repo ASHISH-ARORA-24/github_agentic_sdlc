@@ -112,6 +112,131 @@ in `.env`. URLs and column names go in `project.yml`.
 
 ---
 
+## Visual Flow
+
+`✅` = built   `🔲` = not yet built   `◇` = decision / branch point
+
+```
+User provides requirement
+         │
+         ▼
+  load project.yml ✅                          ← orchestrator
+         │
+         ▼
+  create_issue ✅ (GitHub REST API)             ← orchestrator
+         │
+         ▼
+  add_issue_to_board ✅                         ← orchestrator
+  move(Backlog) ✅
+         │
+         ▼
+┌──────────────────────────────────────────┐
+│  ANALYST AGENT 🔲                        │
+│  tools: search_code, get_dependencies,   │
+│         read_file                        │
+│  understand issue, identify files        │
+└──────────────────────────────────────────┘
+         │
+         ▼
+  ◇ feasible?
+  │              │
+  NO             YES
+  │              │
+  ▼              ▼
+flag &      move(Ready) ✅                      ← orchestrator
+STOP             │
+                 ▼
+           move(In Progress) ✅                 ← orchestrator
+                 │
+                 ▼
+           create_branch ✅ (GitHub REST API)   ← orchestrator
+           checkout_branch ✅ (local git)
+                 │
+                 ▼
+┌──────────────────────────────────────────┐
+│  CODER AGENT 🔲                          │
+│  tools: read_file, write_file,           │
+│         run_tests, commit_changes,       │
+│         push_branch                      │
+│  read → write → test → commit → push     │
+└──────────────────────────────────────────┘
+                 │
+                 ▼
+  ◇ tests pass?
+  │                   │
+  NO                  YES
+  │                   │
+  ▼                   ▼
+fix &           create_pr ✅ (GitHub REST API)  ← orchestrator
+retry                 │
+  │           add_comment_to_issue ✅           ← orchestrator
+retries < 3   (link PR → issue card)
+  │                   │
+  ▼                   ▼
+flag &     ┌──────────────────────────────────┐
+STOP       │  REVIEWER AGENT 🔲               │
+           │  tools: get_pr_diff              │
+           │  read PR diff, judge correctness │
+           └──────────────────────────────────┘
+                       │
+                       ▼
+           ◇ agent approved?
+           │                    │
+           NO                   YES
+           │                    │
+           ▼                    ▼
+  fix → retest →          move(In Review) ✅    ← orchestrator
+  re-commit →                   │
+  re-push →                     ▼
+  re-review         ┌───────────────────────┐
+                    │  HITL GATE ✅         │
+                    │  show summary, links  │
+                    │  wait for input       │
+                    └───────────────────────┘
+                               │
+                               ▼
+                    ◇ human approved?
+                    │                  │
+                  REJECT            APPROVE
+                    │                  │
+                    ▼                  ▼
+            send feedback →     merge_pr ✅ (GitHub REST API)   ← orchestrator
+            CODER AGENT                │
+            (rework loop)              ▼
+                                close_issue ✅ (GitHub REST API) ← orchestrator
+                                       │
+                                       ▼
+                                move(Done) ✅                    ← orchestrator
+                                       │
+                                       ▼
+                              delete_branch ✅ (optional)        ← orchestrator
+                                       │
+                                       ▼
+                                     DONE ✅
+```
+
+### Who does what
+
+| Step type | Who performs it | Why |
+|---|---|---|
+| API calls (create_issue, move_task, create_branch, create_pr, merge_pr, close_issue, delete_branch) | Orchestrator directly | No reasoning needed — mechanical calls with known outcomes |
+| Understand codebase, identify affected files | Analyst agent | Requires LLM to read and reason about code |
+| Write code, test, commit, push | Coder agent | Requires LLM to make decisions about the change |
+| Read PR diff, judge correctness | Reviewer agent | Requires LLM to reason about what changed |
+| Decision branches (feasible? tests pass? approved?) | Orchestrator reads agent output | Agent returns structured result, orchestrator branches on it |
+
+### Decision branches
+
+| Branch | Where | What happens |
+|---|---|---|
+| Feasibility fails | After analyst | Flag to human, stop pipeline |
+| Tests fail | Inside coder | Fix and retry — up to 3 times |
+| Tests still failing after 3 retries | After retry loop | Flag to human, stop pipeline |
+| Agent review rejects | After reviewer | Fix → retest → re-commit → re-push → re-review |
+| Human rejects at HITL | HITL gate | Send feedback to coder, rework loop |
+
+---
+
 ## Board States
 
 | Board Column | Entered When |

@@ -632,3 +632,54 @@ PYTHONPATH=. uv run python3 src/llm.py
 Iteration 2 — LangChain Tools. Learn how to define tools using the `@tool` decorator and bind them to the model so the LLM can decide when to call them.
 
 ---
+
+## Session 2 — 2026-08-15
+
+### Step 13 — Studied project end-to-end, designed SDLC agent architecture, documented full pipeline flow
+
+**What we did:**
+Read every documentation file and every source file in the project from scratch. Mapped out the full SDLC pipeline as a visual flow chart showing step sequence, decision branches, agent roles, and build status. Made the key architectural decision about who performs non-reasoning steps. Documented the flow chart in `docs/notes/sdlc_process.md`.
+
+**Why:**
+Before building the next layer of agents, we needed a complete picture of the full pipeline — not just the happy path, but every branch, retry loop, and failure path. Drawing the flow chart forced clarity on questions that prose cannot answer: exactly where does a branch happen? who owns that step? what does the orchestrator call directly vs delegate to an agent?
+
+**What was decided:**
+
+1. **Three new specialist agents are needed:**
+
+   | Agent | Tools | Responsibility |
+   |---|---|---|
+   | Analyst | search_code, get_dependencies, read_file | Understand codebase, identify what needs to change, check feasibility |
+   | Coder | read_file, write_file, run_tests, commit_changes, push_branch | Make the change, test it, commit it, push it — owns test retry loop |
+   | Reviewer | get_pr_diff | Read the actual PR diff, return APPROVED or REJECTED + reason |
+
+2. **Orchestrator calls non-reasoning steps directly as Python** — not through agents:
+   - `create_issue`, `add_issue_to_board`, `move_task`, `create_branch`, `checkout_branch`, `create_pr`, `add_comment_to_issue`, `merge_pr`, `close_issue`, `delete_branch`
+   - These are mechanical API calls — no LLM reasoning needed. Routing them through an agent would add latency and cost for no benefit.
+   - Rule: if a step needs reasoning or judgment → agent. If it has a known, deterministic outcome → orchestrator calls it directly.
+
+3. **Five decision branches in the pipeline:**
+
+   | Branch | Where | What happens |
+   |---|---|---|
+   | Feasibility fails | After analyst | Flag to human, stop |
+   | Tests fail (< 3 retries) | Inside coder | Fix and retry |
+   | Tests fail (3 retries exhausted) | After retry loop | Flag to human, stop |
+   | Agent review rejects | After reviewer | Fix → retest → re-commit → re-push → re-review |
+   | Human rejects at HITL | HITL gate | Send feedback to coder, rework loop |
+
+4. **Build order for the next phase:**
+   Build the SDLC orchestrator as the spine first. Each time the sequence reaches an agent step, pause and build that agent. This way we understand why each agent exists before building it.
+
+**Files changed:**
+- `docs/notes/sdlc_process.md` — added full visual flow chart section with ASCII arrows, decision diamonds, ✅/🔲 build status markers, "who does what" table, and decision branches table
+
+**How it compares to CodeAtlas:**
+CodeAtlas never implemented the GitHub SDLC pipeline — it was the major gap. The multi-agent orchestrator in `multi_agent_demo/orchestrator.py` handled code analysis only (analyst, coder, tester, reviewer), but never touched GitHub. Here we are designing and building the full loop: from requirement all the way to merged PR and closed issue.
+
+The same principles apply: orchestrator has no LLM, agents have one job each, reviewer sees no context from the coder. The difference is that this orchestrator also drives real GitHub API calls, real git operations, and a real human approval gate.
+
+**Next:**
+Build `src/sdlc_orchestrator.py` — the full SDLC pipeline as a fixed sequence. Build each agent (analyst, coder, reviewer) as the orchestrator reaches that step.
+
+---

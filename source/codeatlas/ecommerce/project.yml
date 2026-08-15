@@ -12,6 +12,10 @@ github:
   # GitHub account that owns all repos and the project board.
   owner: ASHISH-ARORA-24
 
+  # Central repo where all issues are created — one place for all change requests.
+  # Code changes go to individual service repos. Issues always go here.
+  issues_repo: change_management
+
   # GitHub URLs for each repository in this project.
   # Agents use these to create branches, commit, push, and open PRs.
   repos:
