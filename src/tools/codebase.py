@@ -267,8 +267,10 @@ def make_tools(project: str) -> list:
         env               = os.environ.copy()
         env["PYTHONPATH"] = str(SOURCE_ROOT.resolve())
 
+        # Use uv run so each service repo's own pyproject.toml and
+        # dependencies are used — not the root project's environment.
         result = subprocess.run(
-            ["python", "-m"] + test_command.split(),
+            ["uv", "run"] + test_command.split(),
             cwd=repo_root, capture_output=True, text=True, env=env,
         )
 

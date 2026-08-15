@@ -39,6 +39,7 @@ def find_python_files(project_path: str) -> list[str]:
         str(file)
         for file in project.rglob("*.py")
         if "__pycache__" not in file.parts
+        and ".venv" not in file.parts
     ]
 
     return sorted(python_files)

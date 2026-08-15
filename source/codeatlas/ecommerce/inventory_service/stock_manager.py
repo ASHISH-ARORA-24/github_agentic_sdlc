@@ -8,7 +8,7 @@
 # database later means changing only this file — the public method
 # signatures stay identical, so main.py and any callers do not change.
 
-from codeatlas.ecommerce.inventory_service.models import StockLevel
+from models import StockLevel
 
 
 # Minimum allowed quantity for any stock operation.

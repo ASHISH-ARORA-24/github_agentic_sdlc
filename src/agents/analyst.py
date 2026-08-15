@@ -56,7 +56,9 @@ No explanation, no markdown, just the JSON:
   "status": "feasible" or "already_implemented" or "not_feasible",
   "repo": "name of the service repo that needs to change",
   "files_to_change": ["relative/path/to/file.py"],
-  "summary": "what needs to change and why, in plain English"
+  "summary": "what needs to change and why, in plain English",
+  "branch_type": "one of: feat, fix, hotfix, docs, test, chore, refactor",
+  "branch_title": "short-hyphenated-lowercase-title, max 30 chars"
 }
 
 Status values:
@@ -64,7 +66,12 @@ Status values:
   already_implemented — the requirement is already satisfied in the current code
   not_feasible        — the requirement cannot be implemented (out of scope, impossible, etc.)
 
-If status is already_implemented or not_feasible, files_to_change can be an empty list.
+Branch fields:
+  branch_type  — choose the type that best matches the requirement (feat for new features, fix for bugs, etc.)
+  branch_title — 3 to 5 meaningful words, lowercase, hyphen-separated, no stop words, max 30 chars
+                 e.g. "add-stock-validation" or "fix-negative-quantity-check"
+
+If status is already_implemented or not_feasible, branch_type and branch_title can be empty strings.
 """
 
 
@@ -166,4 +173,6 @@ if __name__ == "__main__":
     print(f"Status         : {result['status']}")
     print(f"Repo           : {result['repo']}")
     print(f"Files to change: {result['files_to_change']}")
+    print(f"Branch type    : {result['branch_type']}")
+    print(f"Branch title   : {result['branch_title']}")
     print(f"Summary        : {result['summary']}")

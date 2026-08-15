@@ -79,6 +79,9 @@ class SDLCState:
         self.review_result:  dict = None   # {status: approved|rejected, reason}
         self.human_approval: dict = None   # {approved: bool, reason: str}
 
+        # Final synthesized response — set when pipeline ends (any path)
+        self.final_response: str = None
+
         # Pipeline tracking
         self.status: str = "started"
         # started → analysing → coding → reviewing → awaiting_human

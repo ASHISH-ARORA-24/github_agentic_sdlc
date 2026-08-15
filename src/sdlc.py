@@ -37,10 +37,11 @@ from src.tools.github import (
     create_pr,
     merge_pr,
 )
-from src.tools.github_project_board import add_issue_to_board, move_task
+from src.tools.github_project_board import add_issue_to_board, move_task, close_task, add_comment_to_task
 from src.tools.git import checkout_main, pull_main, checkout_branch
 from src.hitl.approve_pr import request_pr_approval
 from src.agents.analyst import run_analyst
+from src.agents.synthesizer import synthesize
 
 load_dotenv()
 
@@ -102,15 +103,51 @@ class SDLCPipeline:
             "issue_number": self.state.github_issue,
         })
 
+        self._move_board("backlog")
+        print(f"Board     : {self.config['github']['project_board_url']}")
+
+    def _move_board(self, column: str):
+        """Moves the issue card to the given board column. Used at every board transition."""
         move_task.invoke({
             "project":      self.project,
             "issue_number": self.state.github_issue,
-            "column":       "backlog",
+            "column":       column,
+        })
+        print(f"Issue #{self.state.github_issue} → {column.replace('_', ' ').title()}")
+
+    def _close_issue(self, comment: str):
+        """
+        Posts a comment on the GitHub issue then closes it.
+        The comment is the synthesized final response — visible to anyone reading the issue.
+        """
+        add_comment_to_issue.invoke({
+            "project":      self.project,
+            "issue_number": self.state.github_issue,
+            "comment":      comment,
+        })
+        print(f"Comment posted on issue #{self.state.github_issue}")
+
+        close_issue(project=self.project, issue_number=self.state.github_issue)
+        print(f"Issue #{self.state.github_issue} closed")
+
+    def _close_task_on_board(self, comment: str):
+        """
+        Posts a comment on the board task, moves it to Done, then archives it.
+        The board task and the GitHub issue are two separate things — each gets its own close.
+        """
+        add_comment_to_task.invoke({
+            "project":      self.project,
+            "issue_number": self.state.github_issue,
+            "comment":      comment,
         })
 
-        board_url = self.config["github"]["project_board_url"]
-        print(f"Issue #{self.state.github_issue} → Backlog")
-        print(f"Board     : {board_url}")
+        self._move_board("done")
+
+        close_task.invoke({
+            "project":      self.project,
+            "issue_number": self.state.github_issue,
+        })
+        print(f"Board task #{self.state.github_issue} archived")
 
     def _run_analyst(self):
         """
@@ -128,14 +165,43 @@ class SDLCPipeline:
         print(f"Status         : {analysis['status']}")
         print(f"Repo           : {analysis['repo']}")
         print(f"Files to change: {analysis['files_to_change']}")
+        print(f"Branch type    : {analysis['branch_type']}")
+        print(f"Branch title   : {analysis['branch_title']}")
         print(f"Summary        : {analysis['summary']}")
 
     def _create_branch(self):
         """
-        Creates the remote feature branch and checks it out locally.
-        Branch name follows convention: feat/issue-{number}-{slug}-agent
+        Assembles the branch name from analyst output, creates it on GitHub,
+        then checks it out locally on top of a fresh pull from main.
         """
-        pass
+        branch = (
+            f"{self.state.analysis['branch_type']}"
+            f"/issue-{self.state.github_issue}"
+            f"-{self.state.analysis['branch_title']}"
+            f"-agent"
+        )
+        self.state.branch = branch
+        print(f"\n--- Step 4: Create branch ({branch}) ---")
+
+        # Ensure local repo starts from a clean, up-to-date main
+        checkout_main.invoke({"project": self.project, "repo": self.state.repo})
+        pull_main.invoke({"project": self.project, "repo": self.state.repo})
+
+        # Create the branch on GitHub (remote)
+        create_branch.invoke({
+            "project":     self.project,
+            "repo":        self.state.repo,
+            "branch_name": branch,
+        })
+
+        # Checkout the branch locally so the coder writes to the right branch
+        checkout_branch.invoke({
+            "project":     self.project,
+            "repo":        self.state.repo,
+            "branch_name": branch,
+        })
+
+        print(f"Branch ready : {branch}")
 
     def _run_coder(self, feedback: str = None):
         """
@@ -166,6 +232,13 @@ class SDLCPipeline:
         """
         pass
 
+    def _synthesize(self, results: list) -> str:
+        """
+        Calls the synthesizer to produce one clean final response from step results.
+        Returns the synthesized text — used as the comment on the issue and board task.
+        """
+        return synthesize(task=self.requirement, results=results)
+
     def _merge_and_close(self):
         """Merges the PR, closes the issue, moves board to Done, deletes branch."""
         pass
@@ -186,13 +259,24 @@ class SDLCPipeline:
         self._add_to_board()
         self._run_analyst()
 
-        # Status check — only continue if analyst says feasible
-        # already_implemented and not_feasible both stop the pipeline
         status = self.state.analysis["status"]
+
         if status != "feasible":
-            print(f"\nPipeline stopped — {status}: {self.state.analysis['summary']}")
+            # Early stop — analyst said already_implemented or not_feasible
+            self.state.final_response = self._synthesize([{
+                "step_id": 1,
+                "action":  "Investigate codebase",
+                "result":  self.state.analysis["summary"],
+            }])
+            self._close_issue(comment=self.state.final_response)
+            self._close_task_on_board(comment=self.state.final_response)
             self.state.status = "stopped"
             return self.state
+
+        # status == "feasible" — continue to coder and reviewer
+        self._move_board("ready")
+        self._move_board("in_progress")
+        self._create_branch()
 
         return self.state
 
@@ -208,4 +292,10 @@ if __name__ == "__main__":
     requirement = sys.argv[2]
 
     sdlc = SDLCPipeline(project=project, requirement=requirement)
-    sdlc.run()
+    state = sdlc.run()
+    # Always runs — print result and return state
+    print(f"\n{'='*60}")
+    print(f"PIPELINE RESULT")
+    print(f"{'='*60}")
+    print(state.final_response)
+
