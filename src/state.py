@@ -37,3 +37,49 @@ def create_state(project: str, task: str, plan: dict) -> dict:
         "results":      [],   # one entry added per completed step
         "status":       "planned",  # planned → in_progress → completed
     }
+
+
+class SDLCState:
+    """
+    Holds all state for one SDLC pipeline run.
+
+    Designed as a class so fields are named attributes — cleaner than dict keys,
+    self-documenting, and impossible to typo silently.
+
+    The user provides only project + requirement.
+    Every other field starts as None and is filled in as the pipeline progresses.
+
+    Field lifecycle:
+      repo           — set by analyst agent (which service is affected)
+      github_issue   — set after create_issue
+      branch         — set after create_branch
+      pr_number      — set after create_pr
+      analysis       — set after analyst agent runs
+      files_modified — set after coder agent runs
+      review_result  — set after reviewer agent runs
+      human_approval — set after HITL gate
+    """
+
+    def __init__(self, project: str, requirement: str):
+        # Identity — provided by user, never change
+        self.project     = project
+        self.requirement = requirement
+
+        # Filled by analyst — which service repo is affected
+        self.repo: str = None
+
+        # GitHub objects — filled as pipeline progresses
+        self.github_issue: int = None    # issue number
+        self.branch:       str = None    # feature branch name
+        self.pr_number:    int = None    # pull request number
+
+        # Agent outputs
+        self.analysis:       dict = None   # {feasible, repo, files_to_change, summary}
+        self.files_modified: list = []     # file paths written by the coder
+        self.review_result:  dict = None   # {status: approved|rejected, reason}
+        self.human_approval: dict = None   # {approved: bool, reason: str}
+
+        # Pipeline tracking
+        self.status: str = "started"
+        # started → analysing → coding → reviewing → awaiting_human
+        # → merging → done | failed | stopped

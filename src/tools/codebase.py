@@ -292,3 +292,16 @@ def make_tools(project: str) -> list:
         return _save_memory(project=project, key=key, value=value)
 
     return [search_code, get_dependencies, read_file, write_file, run_tests, save_memory]
+
+
+def make_read_tools(project: str) -> list:
+    """
+    Returns only the read-only tools — search_code, get_dependencies, read_file.
+
+    Used by the Analyst agent. By giving it only these three tools, the analyst
+    physically cannot write files or run tests — the guardrail is in the tool set,
+    not just in the system prompt.
+    """
+    all_tools  = make_tools(project)
+    read_names = {"search_code", "get_dependencies", "read_file"}
+    return [t for t in all_tools if t.name in read_names]
