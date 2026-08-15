@@ -7,14 +7,21 @@ It is also read at the start of every conversation so Claude knows exactly where
 
 ## Current Status
 
-**Phase:** SDLC Agents
-**Next step:** Build `src/sdlc_orchestrator.py` as the pipeline spine. Build each agent (analyst, coder, reviewer) as the orchestrator reaches that step — analyst first, then coder, then reviewer.
+**Phase:** ✅ End-to-end SDLC pipeline complete and validated in production
+**Next step:** LangGraph migration (Iteration 11+) — rebuild `sdlc.py` as a graph with typed state, nodes, edges, and conditional edges
 
-### What was decided in the last session (2026-08-15)
-- Three new specialist agents needed: **Analyst** (read-only codebase tools), **Coder** (write + git tools, owns test retry loop), **Reviewer** (get_pr_diff only)
-- Orchestrator calls non-reasoning steps directly as Python (create_issue, move_task, create_branch, create_pr, merge_pr, close_issue, etc.) — no agent needed for mechanical API calls
-- Full pipeline flow chart with all decision branches documented in `docs/notes/sdlc_process.md`
-- Build order: orchestrator spine first → build each agent as its step is reached
+### What was completed in the last session (2026-08-15)
+- **All three specialist agents built and working:** `src/agents/analyst.py`, `src/agents/coder.py`, `src/agents/reviewer.py`
+- **`SDLCPipeline` class** (`src/sdlc.py`) — full pipeline as a class with 12 private methods, `run()` sequences everything
+- **`SDLCState` class** (`src/state.py`) — named attributes replacing dict-based state
+- **Two rework loops working end to end:**
+  - Reviewer rejects → coder rework → re-review (max 2)
+  - Human rejects → coder rework → re-review → re-HITL (max 2)
+- **Retry caps enforced in code**, not just prompt (3 test fails, 30 iterations)
+- **Service repos restructured** as standalone uv projects (`pyproject.toml`, `uv.lock`, direct imports)
+- **Real test suite** added to `order_service/tests/test_order_manager.py`
+- **Pipeline validated on real GitHub** — 3 successful runs including happy path, early stop, and rework loop
+- **Removed:** old `src/orchestrator.py` (replaced by `SDLCPipeline`)
 
 ---
 

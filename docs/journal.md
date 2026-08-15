@@ -683,3 +683,91 @@ The same principles apply: orchestrator has no LLM, agents have one job each, re
 Build `src/sdlc_orchestrator.py` — the full SDLC pipeline as a fixed sequence. Build each agent (analyst, coder, reviewer) as the orchestrator reaches that step.
 
 ---
+
+## Session 3 — 2026-08-15 (continued)
+
+### Step 14 — Built the full end-to-end SDLC pipeline
+
+**What we did:**
+Built and validated the complete agentic SDLC pipeline end to end on real GitHub. Created three new specialist agents (analyst, coder, reviewer), the `SDLCPipeline` class with 12 named methods, `SDLCState` class, two rework loops, and set up both service repos as standalone uv projects with real test suites.
+
+**Files created:**
+- `src/sdlc.py` — `SDLCPipeline` class, the full pipeline spine
+- `src/agents/analyst.py` — read-only agent, returns `{status, repo, files_to_change, summary, branch_type, branch_title}`
+- `src/agents/coder.py` — write + test + git tools, retries in code
+- `src/agents/reviewer.py` — reads real PR diff, returns `{status, reason}`
+- `src/tools/coder.py` — `make_coder_tools()` — combines codebase read/write/test with git commit/push, all with project/repo/branch baked in
+- `source/codeatlas/ecommerce/order_service/tests/test_order_manager.py` — real test suite that defines expected behaviour
+- `source/codeatlas/ecommerce/inventory_service/pyproject.toml` + `uv.lock`
+- `source/codeatlas/ecommerce/order_service/pyproject.toml` + `uv.lock` + `.gitignore`
+
+**Files changed:**
+- `src/state.py` — added `SDLCState` class with named attributes, `final_response` field
+- `src/tools/__init__.py` — cleaned up, only a directory index now
+- `src/agents/executor.py` — direct import from `src.tools.codebase`
+- `crawlers/python_ast.py` — exclude `.venv` from crawls
+- `src/tools/codebase.py` — added `make_read_tools()` factory, `run_tests` uses `uv run`
+- Both service repos — fixed imports (removed `codeatlas.ecommerce.X.` package prefix, use direct imports)
+
+**Files deleted:**
+- `src/orchestrator.py` — replaced by `SDLCPipeline`
+
+**Key concepts and decisions:**
+
+1. **State as a class, not a dict.** Named attributes (`state.github_issue`) are self-documenting, IDE-completable, and impossible to typo. Every field has a defined lifecycle: filled by which step, consumed by which method. Compare to CodeAtlas which passed state as a raw dict — cleaner here.
+
+2. **Pipeline as a class, not a function.** `SDLCPipeline.run()` sequences 12 private methods. Retry loops call methods again (`_run_coder(feedback=...)`) — no code duplication. `_move_board(column)`, `_close_issue(comment)`, `_close_task_on_board(comment)` — reusable across happy path and error paths.
+
+3. **Orchestrator vs agent split.** All GitHub/git API calls are direct Python calls from the orchestrator. Only three steps go through agents (analyst, coder, reviewer) — the ones needing LLM reasoning. This keeps the pipeline predictable and testable.
+
+4. **Retry caps enforced in code, not just prompt.** The system prompt says "retry up to 3 times" but the LLM ignores it and keeps trying. Hard counter in the coder (`test_fail_count >= MAX_TEST_FAILS`) + iteration limit (`MAX_ITERATIONS = 30`) — the LLM cannot bypass these.
+
+5. **Preserve existing code in write_file.** First coder run rewrote `order_manager.py` from scratch, dropping `_reserve_all_items`, `_release_items`, `inventory_client`. Fixed via explicit system prompt instruction: "MINIMAL change, keep ALL existing code, you are ADDING not REWRITING."
+
+6. **Read the test file when tests fail.** Second coder issue — was adding validation to the wrong layer (`main.py` HTTP handler instead of `order_manager.py` business logic). Fixed via system prompt: "read the test file to see which class/method the failing test calls directly, fix goes THERE."
+
+7. **Analyst returns branch metadata.** Analyst returns `branch_type` (feat/fix/etc.) and `branch_title` (short-hyphenated-lowercase, max 30 chars). Orchestrator assembles: `{type}/issue-{N}-{title}-agent`. The `-agent` suffix is a guardrail — only agent branches can be merged automatically.
+
+8. **Coder returns structured commits list.** Not just one `commit_message` string. Full list of `{message, changes, test_results}` per commit. Enables full traceability and multi-commit workflows without reading git log.
+
+9. **Service repos are standalone uv projects.** Each has its own `pyproject.toml`, `uv.lock`, and virtual environment. `run_tests` uses `uv run pytest` inside the service directory. No cross-project import gymnastics — same pattern as real microservices.
+
+10. **Testing failure is a design signal, not a bug.** One test fails intentionally (`test_create_order_rejects_empty_items`) — that's the target. The coder makes it pass. TDD baked into the workflow.
+
+**End-to-end validation runs:**
+
+| Run | Requirement | Result |
+|---|---|---|
+| Issue #23 | Add empty cart validation | ✅ Happy path — merged |
+| Issue #24 | Same (rerun) | ✅ Early stop — analyst said `already_implemented`, issue closed cleanly |
+| Issue #25 | Add quantity < 1 validation | ✅ Rework loop — human rejected first attempt, coder addressed feedback, second attempt approved and merged |
+
+**Pipeline sequence (validated):**
+```
+create_issue → board Backlog → analyst
+  ├─ already_implemented → synthesize → close issue + board → stop
+  ├─ not_feasible → synthesize → close issue + board → stop
+  └─ feasible → board Ready → board In Progress → create_branch → coder
+        ├─ tests fail 3x → close issue + board → stop
+        └─ tests pass → create_pr → reviewer (loop max 2)
+              ├─ rejected 3x → close issue + board → stop
+              ├─ rejected → coder rework → back to reviewer
+              └─ approved → board In Review → HITL (loop max 2)
+                    ├─ rejected 3x → close issue + board → stop
+                    ├─ rejected → coder rework → re-reviewer → back to HITL
+                    └─ approved → merge_pr → synthesize → close issue + board + delete branch
+```
+
+**Bugs found and fixed during the session:**
+- **LLM used `'your_repo_name'` as placeholder** — task message now includes explicit repo instruction
+- **Coder infinite loop** — added `MAX_ITERATIONS = 30` and `MAX_TEST_FAILS = 3` hard caps
+- **Coder rewrote files from scratch** — system prompt now says "minimal change, keep all existing code"
+- **Coder fixed wrong file** — system prompt now says "read the test file to find which class the test calls directly"
+- **`state.py` old file header comment mentioned dict-based state** — kept because both `create_state()` (dict) and `SDLCState` (class) coexist for backward compat
+
+**Next:**
+The pipeline is complete. Next iterations:
+- Update `docs/interview.md` with the new concepts learned this session (rework loops, retry caps, agent contract patterns, state class design)
+- Move to LangGraph — rebuild `SDLCPipeline` as a StateGraph with typed state, nodes, edges, and conditional edges. The retry loops become natural graph loops with checkpointing.
+
+---
