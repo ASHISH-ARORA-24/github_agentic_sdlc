@@ -26,7 +26,7 @@ from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 
-from src.tools import make_tools
+from src.tools.codebase import make_tools
 from src.memory_store import get_memories
 from src.observability.tracer import new_trace, record_llm_call, record_tool_call, finish_trace
 

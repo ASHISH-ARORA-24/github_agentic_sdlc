@@ -1,14 +1,8 @@
-# src/tools/__init__.py
+# src/tools/
 #
-# Re-exports make_tools so existing imports don't need to change.
-# As new tool files are added (github_tools.py etc.), combine them here.
-#
-# Current:
-#   from src.tools import make_tools   ← works, pulls from code_tools.py
-#
-# Future (when GitHub tools are added):
-#   from src.tools.code_tools   import make_code_tools
-#   from src.tools.github_tools import make_github_tools
-#   def make_tools(project): return make_code_tools(project) + make_github_tools(project)
-
-from src.tools.codebase import make_tools
+# Each file owns one domain:
+#   codebase.py             — search, read, write, test, memory (make_tools, make_read_tools)
+#   git.py                  — local git operations
+#   github.py               — GitHub REST API
+#   github_project_board.py — GitHub Projects v2 GraphQL
+#   coder.py                — coder agent tool set (codebase + git, make_coder_tools)

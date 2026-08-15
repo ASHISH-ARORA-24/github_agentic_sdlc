@@ -75,6 +75,7 @@ class SDLCState:
 
         # Agent outputs
         self.analysis:       dict = None   # {feasible, repo, files_to_change, summary}
+        self.coder_result:   dict = None   # {status, files_modified, commit_message}
         self.files_modified: list = []     # file paths written by the coder
         self.review_result:  dict = None   # {status: approved|rejected, reason}
         self.human_approval: dict = None   # {approved: bool, reason: str}

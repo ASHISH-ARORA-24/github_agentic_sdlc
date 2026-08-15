@@ -30,80 +30,92 @@ import time
 from dotenv import load_dotenv
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
-from langchain_core.tools import tool
 
-from src.tools.codebase import make_tools
-from src.tools.git import commit_changes as _git_commit, push_branch as _git_push
+from src.tools.coder import make_coder_tools
 from src.observability.tracer import new_trace, record_llm_call, record_tool_call, finish_trace
 
 load_dotenv()
 
 
 CODER_SYSTEM_PROMPT = """
-You are a senior software engineer implementing a code change.
+You are a very senior software engineer. You think before you act, you work in small
+logical steps, and you commit your work as you go — just like a professional developer
+working on a real codebase.
 
-Your job in order:
-1. Read the file(s) that need to change — understand what is already there
-2. Write the code change — provide the COMPLETE new file content, not just the changed section
-3. Run the tests to validate your change
-4. If tests fail, read the failure output carefully, fix the code, run tests again
-5. Retry up to 3 times — if tests still fail after 3 attempts, stop and report failed
-6. When all tests pass, commit the changes with a conventional commit message
-7. Push the branch to GitHub
+Your workflow:
+
+STEP 1 — Understand first
+  Read every file that needs to change. Understand the existing code completely
+  before touching anything. Never guess at what is already there.
+
+STEP 2 — Plan mentally
+  Identify the exact change needed. Break it into logical pieces if the change is large.
+  One logical piece = one commit.
+
+STEP 3 — Implement one logical piece at a time
+  Make the MINIMAL change needed to satisfy the requirement.
+  Keep ALL existing code — imports, helper methods, private methods, comments, docstrings.
+  You are ADDING to or MODIFYING existing code — you are NOT rewriting the file.
+
+  When calling write_file:
+  - The content you provide REPLACES the entire file
+  - So the content MUST contain everything that was there before, plus your change
+  - Never omit existing methods, classes, imports, or docstrings
+  - Never simplify or "clean up" code that wasn't part of the requirement
+
+  Match the existing code style, naming conventions, and patterns exactly.
+
+STEP 4 — Test immediately after each change
+  Run the tests right after writing. Do not skip this step.
+
+STEP 5 — Commit if tests pass
+  If tests pass, commit with a clear, specific message.
+  A good commit message explains WHAT changed and WHY — not just "fix stuff".
+  Commit message format: type: short description
+  Valid types: feat, fix, hotfix, docs, test, chore, refactor
+  Example: "feat: add empty cart validation to OrderManager.create_order"
+
+STEP 6 — Fix and recommit if tests fail
+  Read the failure output carefully. Understand the root cause before changing anything.
+
+  IMPORTANT — before fixing, read the test file to understand exactly what is being tested:
+  - Which class and method does the failing test call directly?
+  - The fix must go in THAT class/method — not in a wrapper or handler above it.
+  - A test that calls OrderManager.create_order() tests order_manager.py, not main.py.
+  - Do not guess — read the test file with read_file to confirm the target.
+
+  Fix the specific failing case. Write the complete fixed file. Run tests again.
+  If tests pass — commit the fix with a clear message explaining what was wrong.
+  Retry this up to 3 times. If tests still fail after 3 attempts — stop and report failed.
+
+STEP 7 — Push when everything is done
+  Only push when ALL tests pass and ALL logical pieces are committed.
+  Push is the final signal that the work is complete and ready for review.
 
 Rules:
-- Always read before writing — never guess at the existing code
-- Write the complete file — not just the diff or the changed function
-- Commit message must follow conventional commits: type: description
-  Valid types: feat, fix, hotfix, docs, test, chore, refactor, style, perf
-  Example: "feat: add empty cart validation to OrderManager.create_order"
-- Do not create new files unless the requirement explicitly asks for it
+  - Read before writing — always
+  - Write complete file content — never partial patches
+  - Commit at each logical step — not one big commit at the end
+  - Match existing code style — do not introduce new patterns without reason
+  - Do not create new files unless the requirement explicitly asks for it
+  - Do not modify test files unless the requirement asks for new tests
 
-When finished, return a JSON object ONLY. No explanation, no markdown, just JSON:
+When fully done, return a JSON object ONLY. No explanation, no markdown, just JSON:
 {
   "status": "done" or "failed",
   "files_modified": ["relative/path/to/file.py"],
-  "commit_message": "the commit message used, or reason for failure if status is failed"
+  "commits": [
+    {
+      "message":      "conventional commit message for this commit",
+      "changes":      "plain English description of what changed in this commit and why",
+      "test_results": "brief summary of test run outcome e.g. '8 passed in 0.30s' or '1 failed — test_create_order_rejects_empty_items'"
+    }
+  ]
 }
+
+If status is failed, commits should still list everything attempted so far, and the last
+entry should explain what failed and why tests could not be fixed after 3 attempts.
 """
-
-
-def make_coder_tools(project: str, repo: str, branch: str) -> list:
-    """
-    Creates tools for the coder agent with project/repo/branch baked in.
-
-    Codebase tools (read, write, test) — project baked in via make_tools()
-    Git tools (commit, push) — wrapped so LLM only decides the commit message.
-    The LLM never sees or chooses project, repo, or branch for git operations.
-    """
-    # Codebase tools — project already baked in via make_tools closure
-    all_codebase  = make_tools(project)
-    codebase_tools = [t for t in all_codebase if t.name in ("read_file", "write_file", "run_tests")]
-
-    # Git tools — wrap to bake in project/repo/branch
-    # LLM only decides: the commit message
-
-    @tool
-    def commit_changes(message: str) -> dict:
-        """
-        Stages all changed files and commits them locally.
-        Call this after tests pass.
-        Message must follow conventional commits: type: description
-        Valid types: feat, fix, hotfix, docs, test, chore, refactor
-        Example: "feat: add empty cart validation to OrderManager"
-        """
-        return _git_commit.invoke({"project": project, "repo": repo, "message": message})
-
-    @tool
-    def push_branch() -> dict:
-        """
-        Pushes the feature branch to GitHub (origin).
-        Call this after commit_changes succeeds.
-        No arguments needed.
-        """
-        return _git_push.invoke({"project": project, "repo": repo, "branch_name": branch})
-
-    return codebase_tools + [commit_changes, push_branch]
 
 
 def _extract_json(text: str) -> dict:
@@ -144,11 +156,13 @@ def run_coder(
     llm_with_tools = llm.bind_tools(tools)
     tool_by_name   = {t.name: t for t in tools}
 
-    # Build the task — include human feedback if this is a rework after HITL rejection
+    # Build the task — include repo and files explicitly so the LLM never guesses
     task = (
         f"Requirement: {requirement}\n\n"
+        f"Repository : {repo}\n"
         f"Files to change: {', '.join(files_to_change)}\n\n"
-        f"The feature branch is already checked out locally. "
+        f"The feature branch '{branch}' is already checked out locally. "
+        f"Use repository name '{repo}' when calling read_file and write_file. "
         f"Read the files, implement the change, run tests, commit, and push."
     )
     if feedback:
@@ -165,7 +179,26 @@ def run_coder(
 
     print("\n--- Coder starting ---\n")
 
+    MAX_ITERATIONS  = 30   # safety net — prevents runaway loops
+    MAX_TEST_FAILS  = 3    # hard limit — stop after 3 consecutive test failures
+    iterations      = 0
+    test_fail_count = 0
+    commits_so_far  = []   # track commits made during this run
+
     while True:
+        iterations += 1
+        if iterations > MAX_ITERATIONS:
+            if standalone:
+                finish_trace(obs)
+            return {
+                "status":         "failed",
+                "files_modified": [],
+                "commits":        commits_so_far or [{
+                    "message":      "agent loop exceeded max iterations",
+                    "changes":      "agent could not complete the task within 30 iterations",
+                    "test_results": "n/a",
+                }],
+            }
         response = llm_with_tools.invoke(messages)
         messages.append(response)
         record_llm_call(obs, response)
@@ -197,6 +230,35 @@ def run_coder(
             record_tool_call(obs, tool_name, duration_ms, success)
 
             print(f"Result      : {str(result)[:300]}...\n")
+
+            # Hard test failure counter — enforced in code, not just in prompt
+            if tool_name == "run_tests" and isinstance(result, dict):
+                if not result.get("passed", True):
+                    test_fail_count += 1
+                    print(f"Test failures: {test_fail_count}/{MAX_TEST_FAILS}")
+                    if test_fail_count >= MAX_TEST_FAILS:
+                        print("\n--- Coder stopped: max test failures reached ---")
+                        if standalone:
+                            finish_trace(obs)
+                        return {
+                            "status":         "failed",
+                            "files_modified": [],
+                            "commits":        commits_so_far or [{
+                                "message":      "tests failed after 3 attempts",
+                                "changes":      "could not fix failing tests in 3 retries",
+                                "test_results": result.get("stdout", "")[:300],
+                            }],
+                        }
+                else:
+                    test_fail_count = 0  # reset on pass
+
+            # Track commits made by the agent
+            if tool_name == "commit_changes" and success:
+                commits_so_far.append({
+                    "message":      tool_args.get("message", ""),
+                    "changes":      "",
+                    "test_results": "committed",
+                })
 
             messages.append(ToolMessage(
                 content=json.dumps(result, default=str),
@@ -237,4 +299,7 @@ if __name__ == "__main__":
     print("=" * 60)
     print(f"Status         : {result['status']}")
     print(f"Files modified : {result['files_modified']}")
-    print(f"Commit message : {result['commit_message']}")
+    for i, commit in enumerate(result.get("commits", []), 1):
+        print(f"  Commit {i}     : {commit.get('message', '')}")
+        print(f"  Changes      : {commit.get('changes', '')}")
+        print(f"  Tests        : {commit.get('test_results', '')}")

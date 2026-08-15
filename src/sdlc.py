@@ -41,11 +41,15 @@ from src.tools.github_project_board import add_issue_to_board, move_task, close_
 from src.tools.git import checkout_main, pull_main, checkout_branch
 from src.hitl.approve_pr import request_pr_approval
 from src.agents.analyst import run_analyst
+from src.agents.coder import run_coder
+from src.agents.reviewer import run_reviewer
 from src.agents.synthesizer import synthesize
 
 load_dotenv()
 
-# Maximum times the coder retries after human rejection
+# Maximum times the coder retries after reviewer rejection
+MAX_REVIEWER_REJECTIONS = 2
+# Maximum times the coder retries after human rejection at HITL
 MAX_HUMAN_REJECTIONS = 2
 
 
@@ -205,32 +209,123 @@ class SDLCPipeline:
 
     def _run_coder(self, feedback: str = None):
         """
-        Runs the coder agent. Saves files_modified to state.
+        Runs the coder agent. Saves files_modified and coder_result to state.
         feedback — human rejection reason from a previous HITL step.
                    None on the first run, populated on rework.
         """
-        pass
+        print("\n--- Step 5: Coder ---")
+
+        result = run_coder(
+            project=self.project,
+            repo=self.state.repo,
+            branch=self.state.branch,
+            requirement=self.requirement,
+            files_to_change=self.state.analysis["files_to_change"],
+            feedback=feedback,
+        )
+
+        self.state.files_modified = result.get("files_modified", [])
+        self.state.coder_result   = result
+
+        print(f"Status         : {result['status']}")
+        print(f"Files modified : {result['files_modified']}")
+        for i, commit in enumerate(result.get("commits", []), 1):
+            print(f"  Commit {i}     : {commit['message']}")
+            print(f"  Changes      : {commit['changes']}")
+            print(f"  Tests        : {commit['test_results']}")
 
     def _create_pr(self):
         """
         Opens a pull request from the feature branch to main.
-        Posts the PR URL as a comment on the issue.
+        Posts the PR URL as a comment on the issue for team visibility.
         Saves pr_number to state.
         """
-        pass
+        print("\n--- Step 6: Create PR ---")
+
+        # Build PR body from analyst summary + coder commits
+        commits_text = "\n".join(
+            f"- {c['message']}" for c in self.state.coder_result.get("commits", [])
+        )
+        body = (
+            f"**Requirement:**\n{self.requirement}\n\n"
+            f"**Analysis:**\n{self.state.analysis['summary']}\n\n"
+            f"**Commits:**\n{commits_text}\n\n"
+            f"Closes #{self.state.github_issue}"
+        )
+
+        pr = create_pr.invoke({
+            "project": self.project,
+            "repo":    self.state.repo,
+            "title":   self.requirement,
+            "body":    body,
+            "branch":  self.state.branch,
+        })
+
+        self.state.pr_number = pr["pr_number"]
+        print(f"PR #{self.state.pr_number} created: {pr['url']}")
+
+        # Post PR link as a comment on the issue so it's visible on the board card
+        add_comment_to_issue.invoke({
+            "project":      self.project,
+            "issue_number": self.state.github_issue,
+            "comment":      f"Pull request opened: {pr['url']}",
+        })
+        print(f"PR link posted on issue #{self.state.github_issue}")
 
     def _run_reviewer(self):
         """
-        Runs the reviewer agent. Saves review_result (approved/rejected + reason) to state.
+        Runs the reviewer agent on the current PR.
+        Saves review_result (approved/rejected + reason) to state.
         """
-        pass
+        print("\n--- Step 7: Reviewer ---")
+
+        result = run_reviewer(
+            project=self.project,
+            repo=self.state.repo,
+            pr_number=self.state.pr_number,
+            requirement=self.requirement,
+        )
+
+        self.state.review_result = result
+        print(f"Status : {result['status']}")
+        print(f"Reason : {result['reason']}")
 
     def _hitl(self):
         """
-        Blocks and waits for human to APPROVE or REJECT.
+        Blocks and waits for the human to APPROVE or REJECT the PR.
         Saves human_approval (approved bool + reason) to state.
         """
-        pass
+        print("\n--- Step 9: Human approval ---")
+
+        # Build URLs from config so the human has clickable references
+        owner       = self.config["github"]["owner"]
+        repo        = self.state.repo
+        issue_repo  = self.config["github"]["issues_repo"]
+        pr_url      = f"https://github.com/{owner}/{repo}/pull/{self.state.pr_number}"
+        branch_url  = f"https://github.com/{owner}/{repo}/tree/{self.state.branch}"
+        issue_url   = f"https://github.com/{owner}/{issue_repo}/issues/{self.state.github_issue}"
+        board_url   = self.config["github"]["project_board_url"]
+
+        # Build a short summary of what was done for the human to see
+        commits_text = "\n".join(
+            f"  - {c['message']}" for c in self.state.coder_result.get("commits", [])
+        )
+        summary = (
+            f"Requirement: {self.requirement}\n\n"
+            f"Analyst summary:\n{self.state.analysis['summary']}\n\n"
+            f"Commits made by coder:\n{commits_text}\n\n"
+            f"Reviewer verdict: {self.state.review_result['status']}\n"
+            f"Reviewer notes: {self.state.review_result['reason']}"
+        )
+
+        self.state.human_approval = request_pr_approval(
+            summary=summary,
+            files_changed=self.state.files_modified,
+            pr_url=pr_url,
+            branch_url=branch_url,
+            issue_url=issue_url,
+            board_url=board_url,
+        )
 
     def _synthesize(self, results: list) -> str:
         """
@@ -240,8 +335,44 @@ class SDLCPipeline:
         return synthesize(task=self.requirement, results=results)
 
     def _merge_and_close(self):
-        """Merges the PR, closes the issue, moves board to Done, deletes branch."""
-        pass
+        """
+        Merges the PR into main, then closes the issue and archives the board task.
+        Called only after human approval.
+        """
+        print("\n--- Step 10: Merge and close ---")
+
+        # Merge — plain function, LLM can never trigger this
+        merge_result = merge_pr(
+            project=self.project,
+            repo=self.state.repo,
+            pr_number=self.state.pr_number,
+        )
+        print(f"PR #{self.state.pr_number} merged (sha: {merge_result.get('sha', 'n/a')})")
+
+        # Synthesize the final response covering the whole pipeline
+        self.state.final_response = self._synthesize([
+            {"step_id": 1, "action": "Investigate codebase",     "result": self.state.analysis["summary"]},
+            {"step_id": 2, "action": "Implement change + tests", "result": str(self.state.coder_result.get("commits", []))},
+            {"step_id": 3, "action": "Agent review",             "result": self.state.review_result["reason"]},
+            {"step_id": 4, "action": "Human approval",           "result": "approved and merged"},
+        ])
+
+        # Close the issue and archive the board task with the synthesized comment
+        self._close_issue(comment=self.state.final_response)
+        self._close_task_on_board(comment=self.state.final_response)
+
+        # Optional cleanup — delete the feature branch on GitHub
+        try:
+            delete_branch.invoke({
+                "project":     self.project,
+                "repo":        self.state.repo,
+                "branch_name": self.state.branch,
+            })
+            print(f"Branch {self.state.branch} deleted")
+        except Exception as e:
+            print(f"Branch delete skipped: {e}")
+
+        self.state.status = "done"
 
     # ── Orchestration ─────────────────────────────────────────────────────────
 
@@ -277,6 +408,77 @@ class SDLCPipeline:
         self._move_board("ready")
         self._move_board("in_progress")
         self._create_branch()
+        self._run_coder()
+
+        # If coder failed after retries — stop pipeline cleanly
+        if self.state.coder_result["status"] == "failed":
+            last_commit = self.state.coder_result.get("commits", [{}])[-1]
+            self.state.final_response = self._synthesize([{
+                "step_id": 1,
+                "action":  "Implement code change",
+                "result":  last_commit.get("changes", "Coder failed — see commits for details"),
+            }])
+            self._close_issue(comment=self.state.final_response)
+            self._close_task_on_board(comment=self.state.final_response)
+            self.state.status = "failed"
+            return self.state
+
+        # Happy path — code committed and pushed, open PR
+        self._create_pr()
+
+        # ── Reviewer loop ────────────────────────────────────────────────────
+        # Reviewer rejects → send feedback back to coder → new commits → re-review
+        # Max attempts capped by MAX_REVIEWER_REJECTIONS
+        reviewer_rejections = 0
+        while True:
+            self._run_reviewer()
+            if self.state.review_result["status"] == "approved":
+                break
+            reviewer_rejections += 1
+            if reviewer_rejections > MAX_REVIEWER_REJECTIONS:
+                print(f"\nReviewer rejected {reviewer_rejections} times — stopping pipeline.")
+                self.state.final_response = self._synthesize([{
+                    "step_id": 1,
+                    "action":  "Agent review",
+                    "result":  self.state.review_result["reason"],
+                }])
+                self._close_issue(comment=self.state.final_response)
+                self._close_task_on_board(comment=self.state.final_response)
+                self.state.status = "failed"
+                return self.state
+            # Rework — coder addresses reviewer feedback, then loop back to re-review
+            print(f"\nReviewer rejected — sending back to coder (attempt {reviewer_rejections})")
+            self._run_coder(feedback=self.state.review_result["reason"])
+
+        # ── Board move + HITL loop ───────────────────────────────────────────
+        # Move to In Review only after agent has approved — the board should
+        # only show In Review when a human-ready PR actually exists
+        self._move_board("in_review")
+
+        human_rejections = 0
+        while True:
+            self._hitl()
+            if self.state.human_approval.get("approved"):
+                break
+            human_rejections += 1
+            if human_rejections > MAX_HUMAN_REJECTIONS:
+                print(f"\nHuman rejected {human_rejections} times — stopping pipeline.")
+                self.state.final_response = self._synthesize([{
+                    "step_id": 1,
+                    "action":  "Human approval",
+                    "result":  self.state.human_approval.get("reason", "rejected"),
+                }])
+                self._close_issue(comment=self.state.final_response)
+                self._close_task_on_board(comment=self.state.final_response)
+                self.state.status = "failed"
+                return self.state
+            # Rework — coder addresses human feedback, re-review, then re-HITL
+            print(f"\nHuman rejected — sending back to coder (attempt {human_rejections})")
+            self._run_coder(feedback=self.state.human_approval["reason"])
+            self._run_reviewer()   # re-review after rework before asking human again
+
+        # ── Merge and close ──────────────────────────────────────────────────
+        self._merge_and_close()
 
         return self.state
 
